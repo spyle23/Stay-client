@@ -1,0 +1,25 @@
+name: CI (stay-client)
+on:
+  push:
+    branches: [main]
+  pull_request:
+jobs:
+  quality:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-node@v4
+        with:
+          node-version: 20
+          cache: yarn
+      - run: yarn install --frozen-lockfile
+      - run: yarn lint
+      - run: yarn type-check
+      - run: yarn test
+      - name: e2e (Playwright)
+        run: |
+          yarn playwright install --with-deps chromium
+          yarn test:e2e
+      - run: yarn build
+      - name: Docker image
+        run: docker build -t stay-client:ci .
