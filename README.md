@@ -34,3 +34,21 @@ You can check out [the Next.js GitHub repository](https://github.com/vercel/next
 The easiest way to deploy your Next.js app is to use the [Vercel Platform](https://vercel.com/new?utm_medium=default-template&filter=next.js&utm_source=create-next-app&utm_campaign=create-next-app-readme) from the creators of Next.js.
 
 Check out our [Next.js deployment documentation](https://nextjs.org/docs/app/building-your-application/deploying) for more details.
+
+## Types PMS (OpenAPI)
+
+Le front ne parle qu'au **BFF** (`NEXT_PUBLIC_API_URL`), jamais directement au PMS, mais partage
+les **types de contrat** générés depuis l'OpenAPI de Stay-api dans `src/types/generated/pms.ts`
+(config : `openapi-ts.config.ts`, snapshot : `openapi/stay-api.json`). Ces fichiers sont
+**générés, jamais édités à la main** (`yarn gen:types`).
+
+Pour rafraîchir le snapshot après un changement de contrat PMS (Swagger exposé uniquement en
+Development, `http://localhost:5231`) :
+
+```bash
+curl http://localhost:5231/swagger/v1/swagger.json -o openapi/stay-api.json
+yarn gen:types
+```
+
+Le client HTTP `src/lib/api-client.ts` cible le BFF et envoie le **cookie de session opaque**
+(`credentials: "include"`) : aucune garde JWT au navigateur (le BFF est gardien des jetons).

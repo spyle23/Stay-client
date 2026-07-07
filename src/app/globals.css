@@ -4,12 +4,52 @@
 
 @custom-variant dark (&:is(.dark *));
 
+/* ============================================================================
+   Design tokens — Application Cliente (Direction A « Sérénité »).
+   Source unique de vérité : _bmad-output/planning-artifacts/design-system/tokens.css.
+   Valeurs portées VERBATIM en couleurs CSS complètes (hex) — Tailwind v4/base-nova
+   mappe `--color-*: var(--*)` sans wrapper hsl() : un triplet HSL nu casserait
+   `var(--primary)`. Le mode sombre passe par la classe `.dark` (next-themes),
+   pas `@media prefers-color-scheme`. Aucune valeur en dur hors de ce fichier.
+   ============================================================================ */
+
 @theme inline {
+  /* — Couleurs : slots shadcn mappés aux tokens de marque de :root / .dark — */
   --color-background: var(--background);
   --color-foreground: var(--foreground);
+  --color-card: var(--card);
+  --color-card-foreground: var(--card-foreground);
+  --color-card-2: var(--card-2);
+  --color-popover: var(--popover);
+  --color-popover-foreground: var(--popover-foreground);
+  --color-primary: var(--primary);
+  --color-primary-foreground: var(--primary-foreground);
+  --color-primary-soft: var(--primary-soft);
+  --color-secondary: var(--secondary);
+  --color-secondary-foreground: var(--secondary-foreground);
+  --color-muted: var(--muted);
+  --color-muted-foreground: var(--muted-foreground);
+  --color-accent: var(--accent);
+  --color-accent-foreground: var(--accent-foreground);
+  --color-success: var(--success);
+  --color-success-foreground: var(--success-foreground);
+  --color-success-soft: var(--success-soft);
+  --color-warning: var(--warning);
+  --color-warning-foreground: var(--warning-foreground);
+  --color-warning-soft: var(--warning-soft);
+  --color-destructive: var(--destructive);
+  --color-destructive-foreground: var(--destructive-foreground);
+  --color-destructive-soft: var(--destructive-soft);
+  --color-border: var(--border);
+  --color-border-strong: var(--border-strong);
+  --color-input: var(--input);
+  --color-ring: var(--ring);
+
+  /* — Police (Geist, chargée dans layout.tsx via next/font) — */
   --font-sans: var(--font-geist-sans);
   --font-mono: var(--font-geist-mono);
-  --font-heading: var(--font-geist-sans);
+
+  /* Sidebar / chart : défauts du scaffold, non utilisés par la marketplace (conservés). */
   --color-sidebar-ring: var(--sidebar-ring);
   --color-sidebar-border: var(--sidebar-border);
   --color-sidebar-accent-foreground: var(--sidebar-accent-foreground);
@@ -23,56 +63,100 @@
   --color-chart-3: var(--chart-3);
   --color-chart-2: var(--chart-2);
   --color-chart-1: var(--chart-1);
-  --color-ring: var(--ring);
-  --color-input: var(--input);
-  --color-border: var(--border);
-  --color-destructive: var(--destructive);
-  --color-accent-foreground: var(--accent-foreground);
-  --color-accent: var(--accent);
-  --color-muted-foreground: var(--muted-foreground);
-  --color-muted: var(--muted);
-  --color-secondary-foreground: var(--secondary-foreground);
-  --color-secondary: var(--secondary);
-  --color-primary-foreground: var(--primary-foreground);
-  --color-primary: var(--primary);
-  --color-popover-foreground: var(--popover-foreground);
-  --color-popover: var(--popover);
-  --color-card-foreground: var(--card-foreground);
-  --color-card: var(--card);
-  --radius-sm: calc(var(--radius) * 0.6);
-  --radius-md: calc(var(--radius) * 0.8);
-  --radius-lg: var(--radius);
-  --radius-xl: calc(var(--radius) * 1.4);
-  --radius-2xl: calc(var(--radius) * 1.8);
-  --radius-3xl: calc(var(--radius) * 2.2);
-  --radius-4xl: calc(var(--radius) * 2.6);
+
+  /* — Élévation (thémée : voir --ds-shadow* dans :root / .dark) — */
+  --shadow-soft: var(--ds-shadow-sm); /* cartes au repos */
+  --shadow-elevated: var(--ds-shadow); /* hover, popovers, search */
+
+  /* — Rayons — tiers design : badge/sm 6 · md 8 · bouton/lg 10 · carte/xl 16 — */
+  --radius-xs: 0.375rem; /* 6px  — badges, pills serrées */
+  --radius-sm: 0.375rem; /* 6px */
+  --radius-md: 0.5rem; /* 8px */
+  --radius-lg: var(--radius); /* 10px — boutons, inputs (Button rounded-lg) */
+  --radius-xl: 1rem; /* 16px — cartes (Card rounded-xl) */
+  --radius-2xl: 1.25rem; /* 20px */
+  --radius-3xl: 1.75rem;
+  --radius-4xl: 2rem; /* pills badges (Badge rounded-4xl) */
+
+  /* — Typographie — échelle display→caption (mobile-first, chiffres tabulaires
+     via l'utilitaire Tailwind natif `tabular-nums` sur prix/dates) — */
+  --text-display: clamp(1.75rem, 4vw, 2.5rem);
+  --text-display--line-height: 1.1;
+  --text-display--font-weight: 700;
+  --text-display--letter-spacing: -0.02em;
+  --text-h1: clamp(1.375rem, 3vw, 1.75rem);
+  --text-h1--line-height: 1.2;
+  --text-h1--font-weight: 700;
+  --text-h1--letter-spacing: -0.01em;
+  --text-h2: 1.25rem;
+  --text-h2--line-height: 1.25;
+  --text-h2--font-weight: 700;
+  --text-h3: 1.0625rem;
+  --text-h3--line-height: 1.3;
+  --text-h3--font-weight: 600;
+  --text-body: 0.9375rem;
+  --text-body--line-height: 1.5;
+  --text-body--font-weight: 400;
+  --text-small: 0.8125rem;
+  --text-small--line-height: 1.45;
+  --text-small--font-weight: 400;
+  --text-caption: 0.6875rem;
+  --text-caption--line-height: 1.3;
+  --text-caption--font-weight: 600;
+  --text-caption--letter-spacing: 0.04em;
 }
 
+/* — Thème clair (défaut) ————————————————————————————————————————————————— */
 :root {
-  --background: oklch(1 0 0);
-  --foreground: oklch(0.145 0 0);
-  --card: oklch(1 0 0);
-  --card-foreground: oklch(0.145 0 0);
-  --popover: oklch(1 0 0);
-  --popover-foreground: oklch(0.145 0 0);
-  --primary: oklch(0.205 0 0);
-  --primary-foreground: oklch(0.985 0 0);
-  --secondary: oklch(0.97 0 0);
-  --secondary-foreground: oklch(0.205 0 0);
-  --muted: oklch(0.97 0 0);
-  --muted-foreground: oklch(0.556 0 0);
-  --accent: oklch(0.97 0 0);
-  --accent-foreground: oklch(0.205 0 0);
-  --destructive: oklch(0.577 0.245 27.325);
-  --border: oklch(0.922 0 0);
-  --input: oklch(0.922 0 0);
-  --ring: oklch(0.708 0 0);
-  --chart-1: oklch(0.87 0 0);
-  --chart-2: oklch(0.556 0 0);
-  --chart-3: oklch(0.439 0 0);
-  --chart-4: oklch(0.371 0 0);
-  --chart-5: oklch(0.269 0 0);
-  --radius: 0.625rem;
+  /* Surfaces & texte */
+  --background: #f6f7f9;
+  --foreground: #0f1720;
+  --card: #ffffff;
+  --card-foreground: #0f1720;
+  --card-2: #fbfcfd;
+  --popover: #ffffff;
+  --popover-foreground: #0f1720;
+
+  /* Marque (bleu-sarcelle calme) */
+  --primary: #0e7c86;
+  --primary-foreground: #ffffff;
+  --primary-soft: #e5f2f3;
+
+  /* Neutres de chrome (survols menus/dropdowns/secondary — restent neutres) */
+  --secondary: #eef1f4;
+  --secondary-foreground: #0f1720;
+  --muted: #eef1f4;
+  --muted-foreground: #5b6b7a;
+  --accent: #eef1f4;
+  --accent-foreground: #0f1720;
+
+  /* Sémantiques d'état (toujours couleur + icône + texte) */
+  --success: #137a4b;
+  --success-foreground: #ffffff;
+  --success-soft: #e8f5ef;
+  /* --warning / --destructive légèrement assombris vs tokens.css source pour tenir
+     l'AA (≥ 4,5:1) en petit texte sur leurs tints (badges soft + bouton
+     `bg-destructive/10`) — vérifié par axe en CI. */
+  --warning: #9c5809;
+  --warning-foreground: #ffffff;
+  --warning-soft: #fbf1e3;
+  --destructive: #b8322a;
+  --destructive-foreground: #ffffff;
+  --destructive-soft: #fbeae8;
+
+  /* Bordures / inputs / focus */
+  --border: #e6eaee;
+  --border-strong: #d3dae1;
+  --input: #d3dae1;
+  --ring: #0e7c86;
+
+  /* Rayons (base), cible tactile & élévation */
+  --radius: 0.625rem; /* 10px — base boutons/inputs */
+  --tap-min: 44px; /* cible tactile minimale (WCAG 2.5.5) */
+  --ds-shadow: 0 6px 24px rgba(16, 23, 32, 0.08);
+  --ds-shadow-sm: 0 2px 8px rgba(16, 23, 32, 0.06);
+
+  /* Sidebar / chart — défauts scaffold (non utilisés) */
   --sidebar: oklch(0.985 0 0);
   --sidebar-foreground: oklch(0.145 0 0);
   --sidebar-primary: oklch(0.205 0 0);
@@ -81,32 +165,52 @@
   --sidebar-accent-foreground: oklch(0.205 0 0);
   --sidebar-border: oklch(0.922 0 0);
   --sidebar-ring: oklch(0.708 0 0);
-}
-
-.dark {
-  --background: oklch(0.145 0 0);
-  --foreground: oklch(0.985 0 0);
-  --card: oklch(0.205 0 0);
-  --card-foreground: oklch(0.985 0 0);
-  --popover: oklch(0.205 0 0);
-  --popover-foreground: oklch(0.985 0 0);
-  --primary: oklch(0.922 0 0);
-  --primary-foreground: oklch(0.205 0 0);
-  --secondary: oklch(0.269 0 0);
-  --secondary-foreground: oklch(0.985 0 0);
-  --muted: oklch(0.269 0 0);
-  --muted-foreground: oklch(0.708 0 0);
-  --accent: oklch(0.269 0 0);
-  --accent-foreground: oklch(0.985 0 0);
-  --destructive: oklch(0.704 0.191 22.216);
-  --border: oklch(1 0 0 / 10%);
-  --input: oklch(1 0 0 / 15%);
-  --ring: oklch(0.556 0 0);
   --chart-1: oklch(0.87 0 0);
   --chart-2: oklch(0.556 0 0);
   --chart-3: oklch(0.439 0 0);
   --chart-4: oklch(0.371 0 0);
   --chart-5: oklch(0.269 0 0);
+}
+
+/* — Thème sombre (.dark — piloté par next-themes, `--primary` éclairci pour l'AA) — */
+.dark {
+  --background: #0d1117;
+  --foreground: #e6edf3;
+  --card: #161b22;
+  --card-foreground: #e6edf3;
+  --card-2: #1b222b;
+  --popover: #161b22;
+  --popover-foreground: #e6edf3;
+
+  --primary: #2ba5b0; /* éclairci pour tenir le contraste AA sur fond sombre */
+  --primary-foreground: #04191b;
+  --primary-soft: #123a3d;
+
+  --secondary: #1b222b;
+  --secondary-foreground: #e6edf3;
+  --muted: #1b222b;
+  --muted-foreground: #8b98a5;
+  --accent: #1b222b;
+  --accent-foreground: #e6edf3;
+
+  --success: #3fb27f;
+  --success-foreground: #04140c;
+  --success-soft: #12311f;
+  --warning: #d59b52;
+  --warning-foreground: #1f1403;
+  --warning-soft: #332616;
+  --destructive: #e5837a;
+  --destructive-foreground: #2a0f0c;
+  --destructive-soft: #3a1f1c;
+
+  --border: #26303a;
+  --border-strong: #323d49;
+  --input: #323d49;
+  --ring: #2ba5b0;
+
+  --ds-shadow: 0 6px 24px rgba(0, 0, 0, 0.4);
+  --ds-shadow-sm: 0 2px 8px rgba(0, 0, 0, 0.3);
+
   --sidebar: oklch(0.205 0 0);
   --sidebar-foreground: oklch(0.985 0 0);
   --sidebar-primary: oklch(0.488 0.243 264.376);
@@ -115,6 +219,25 @@
   --sidebar-accent-foreground: oklch(0.985 0 0);
   --sidebar-border: oklch(1 0 0 / 10%);
   --sidebar-ring: oklch(0.556 0 0);
+  --chart-1: oklch(0.87 0 0);
+  --chart-2: oklch(0.556 0 0);
+  --chart-3: oklch(0.439 0 0);
+  --chart-4: oklch(0.371 0 0);
+  --chart-5: oklch(0.269 0 0);
+}
+
+/* — Accent par hôtel (Phase 3) : surcharge LOCALE, surfaces hôtel + confirmation/PDF
+   uniquement. `--hotel-primary` est injecté depuis le branding PMS ultérieurement ;
+   le reste du chrome reste neutre.
+   SANS fallback en dur : quand `--hotel-primary` n'est pas injecté, ces custom
+   properties deviennent invalides à l'usage et HÉRITENT la valeur thémée du parent
+   (clair `#0e7c86` / sombre `#2ba5b0` ajusté AA). Un fallback en dur casserait
+   l'ajustement AA du mode sombre (même spécificité que `.dark`, l'accent gagnant). — */
+[data-hotel-theme] {
+  --primary: var(--hotel-primary);
+  --primary-foreground: var(--hotel-primary-foreground);
+  --primary-soft: var(--hotel-primary-soft);
+  --ring: var(--hotel-primary);
 }
 
 @layer base {
