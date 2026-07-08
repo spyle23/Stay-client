@@ -1,0 +1,20 @@
+{
+  "home": {
+    "title": "Hotelerie",
+    "subtitle": "Book your stay with confidence. Multi-hotel search is coming soon."
+  },
+  "header": {
+    "navLabel": "Main navigation"
+  },
+  "localeSwitcher": {
+    "label": "Change language"
+  },
+  "currencySwitcher": {
+    "label": "Change working currency"
+  },
+  "validation": {
+    "required": "This field is required.",
+    "emailInvalid": "Invalid email address.",
+    "tooShort": "At least {min} characters."
+  }
+}

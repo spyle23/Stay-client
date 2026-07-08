@@ -16,3 +16,14 @@ if (typeof window !== "undefined" && !window.matchMedia) {
     dispatchEvent: vi.fn(),
   }));
 }
+
+// Les primitives Base UI (menus/sélecteurs) observent la taille de l'ancre :
+// jsdom n'implémente pas ResizeObserver → stub minimal (rendu des sélecteurs
+// langue/devise de la Story 1.5).
+if (typeof globalThis.ResizeObserver === "undefined") {
+  globalThis.ResizeObserver = class {
+    observe() {}
+    unobserve() {}
+    disconnect() {}
+  };
+}

@@ -24,9 +24,16 @@ import { Input } from "@/components/ui/input";
 import { Label } from "@/components/ui/label";
 import { Skeleton } from "@/components/ui/skeleton";
 
-/** Style d'injection du branding hôtel (simule l'injection PMS de la Phase 3). */
+/**
+ * Style d'injection du branding hôtel (simule l'injection PMS de la Phase 3).
+ * Le contrat `[data-hotel-theme]` attend AUSSI `--hotel-primary-foreground`
+ * (couleur de texte sur l'accent) : sans elle, `--primary-foreground` reste
+ * invalide et le texte retombe sur `--foreground` (contraste insuffisant sur
+ * l'accent). Un vrai payload de branding fournit toujours ce foreground.
+ */
 const hotelAccent = {
   "--hotel-primary": "#7c3aed",
+  "--hotel-primary-foreground": "#ffffff",
   "--hotel-primary-soft": "#efe7fd",
 } as CSSProperties;
 

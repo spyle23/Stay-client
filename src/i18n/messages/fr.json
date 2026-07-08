@@ -1,0 +1,20 @@
+{
+  "home": {
+    "title": "Hotelerie",
+    "subtitle": "Réservez votre séjour en toute confiance. La recherche multi-hôtels arrive prochainement."
+  },
+  "header": {
+    "navLabel": "Navigation principale"
+  },
+  "localeSwitcher": {
+    "label": "Changer de langue"
+  },
+  "currencySwitcher": {
+    "label": "Changer de devise de travail"
+  },
+  "validation": {
+    "required": "Ce champ est requis.",
+    "emailInvalid": "Adresse e-mail invalide.",
+    "tooShort": "Au moins {min} caractères."
+  }
+}
