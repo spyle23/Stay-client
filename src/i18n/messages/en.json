@@ -1,7 +1,7 @@
 {
   "home": {
-    "title": "Hotelerie",
-    "subtitle": "Book your stay with confidence. Multi-hotel search is coming soon."
+    "title": "Find where to stay, no bad surprises",
+    "subtitle": "We only show rooms that are genuinely available for your dates."
   },
   "header": {
     "navLabel": "Main navigation"
@@ -16,5 +16,60 @@
     "required": "This field is required.",
     "emailInvalid": "Invalid email address.",
     "tooShort": "At least {min} characters."
+  },
+  "search": {
+    "destinationLabel": "Destination",
+    "destinationPlaceholder": "City or country",
+    "datesLabel": "Dates",
+    "datesPlaceholder": "Check-in – Check-out",
+    "guestsLabel": "Guests",
+    "guestsCount": "{count} guest(s)",
+    "decreaseGuests": "Remove a guest",
+    "increaseGuests": "Add a guest",
+    "submit": "Search",
+    "nearMe": "Near me",
+    "nearMeLoading": "Locating…",
+    "errors": {
+      "destinationRequired": "Enter a destination.",
+      "datesRequired": "Choose your check-in and check-out dates.",
+      "checkInPast": "The check-in date cannot be in the past.",
+      "checkOutBeforeCheckIn": "The check-out date must be after the check-in date.",
+      "guestsMin": "At least one guest is required.",
+      "guestsMax": "Too many guests (maximum 30).",
+      "geolocationDenied": "Location denied. Enter a destination to search.",
+      "geolocationUnavailable": "Location unavailable right now. Enter a destination.",
+      "geolocationTimeout": "Locating took too long. Enter a destination.",
+      "geolocationUnsupported": "Geolocation isn’t available here. Enter a destination."
+    }
+  },
+  "results": {
+    "headingFor": "Stays in {destination}",
+    "headingNearby": "Hotels near you",
+    "distanceKm": "{km} km away",
+    "loading": "Searching available hotels…",
+    "resultsCount": "{count} hotel(s) available",
+    "fromLabel": "from",
+    "totalForNights": "total for {nights} night(s)",
+    "priceCalculating": "Calculating total",
+    "unnamedHotel": "Hotel",
+    "unknownCity": "City not specified",
+    "badgeAvailable": "Real availability",
+    "badgeFreeCancellation": "Free cancellation",
+    "densityLabel": "Display density",
+    "densityComfortable": "Comfort",
+    "densityCompact": "Dense",
+    "emptyTitle": "No hotels available",
+    "emptyBody": "Try widening your dates or choosing another destination.",
+    "emptyNearbyTitle": "No hotels available nearby",
+    "emptyNearbyBody": "Try widening your dates or extending the search area.",
+    "emptyCta": "Edit my search",
+    "errorTitle": "Search failed",
+    "errorBody": "Something went wrong. Please try again in a moment.",
+    "degradedTitle": "Service temporarily unavailable",
+    "degradedBody": "We can’t check availability right now. Please try again in a few moments.",
+    "retry": "Try again",
+    "invalidTitle": "Invalid search",
+    "invalidBody": "Check the destination, dates and number of guests.",
+    "invalidCta": "Back to home"
   }
 }

@@ -17,15 +17,13 @@ test.describe("i18n & sélecteurs langue/devise", () => {
   }) => {
     const html = page.locator("html");
     await expect(html).toHaveAttribute("lang", "fr");
-    await expect(page.getByTestId("home-subtitle")).toHaveText(
-      /prochainement/i,
-    );
+    await expect(page.getByTestId("home-subtitle")).toHaveText(/disponibles/i);
 
     await page.getByTestId("locale-switcher").click();
     await page.getByTestId("locale-option-en").click();
 
     await expect(html).toHaveAttribute("lang", "en");
-    await expect(page.getByTestId("home-subtitle")).toHaveText(/coming soon/i);
+    await expect(page.getByTestId("home-subtitle")).toHaveText(/available/i);
     // Contexte de navigation préservé : même URL (aucun préfixe /en).
     expect(new URL(page.url()).pathname).toBe("/");
   });

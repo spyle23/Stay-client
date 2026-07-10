@@ -1,7 +1,7 @@
 {
   "home": {
-    "title": "Hotelerie",
-    "subtitle": "Réservez votre séjour en toute confiance. La recherche multi-hôtels arrive prochainement."
+    "title": "Trouvez où dormir, sans mauvaise surprise",
+    "subtitle": "On ne vous montre que des chambres réellement disponibles pour vos dates."
   },
   "header": {
     "navLabel": "Navigation principale"
@@ -16,5 +16,60 @@
     "required": "Ce champ est requis.",
     "emailInvalid": "Adresse e-mail invalide.",
     "tooShort": "Au moins {min} caractères."
+  },
+  "search": {
+    "destinationLabel": "Destination",
+    "destinationPlaceholder": "Ville ou pays",
+    "datesLabel": "Dates",
+    "datesPlaceholder": "Arrivée – Départ",
+    "guestsLabel": "Voyageurs",
+    "guestsCount": "{count} voyageur(s)",
+    "decreaseGuests": "Retirer un voyageur",
+    "increaseGuests": "Ajouter un voyageur",
+    "submit": "Rechercher",
+    "nearMe": "Autour de moi",
+    "nearMeLoading": "Localisation…",
+    "errors": {
+      "destinationRequired": "Indiquez une destination.",
+      "datesRequired": "Choisissez vos dates d’arrivée et de départ.",
+      "checkInPast": "La date d’arrivée ne peut pas être dans le passé.",
+      "checkOutBeforeCheckIn": "La date de départ doit suivre la date d’arrivée.",
+      "guestsMin": "Au moins un voyageur est requis.",
+      "guestsMax": "Trop de voyageurs (maximum 30).",
+      "geolocationDenied": "Géolocalisation refusée. Saisissez une destination pour rechercher.",
+      "geolocationUnavailable": "Position indisponible pour le moment. Saisissez une destination.",
+      "geolocationTimeout": "La localisation a pris trop de temps. Saisissez une destination.",
+      "geolocationUnsupported": "La géolocalisation n’est pas disponible ici. Saisissez une destination."
+    }
+  },
+  "results": {
+    "headingFor": "Séjours à {destination}",
+    "headingNearby": "Hôtels à proximité",
+    "distanceKm": "à {km} km",
+    "loading": "Recherche des hôtels disponibles…",
+    "resultsCount": "{count} hôtel(s) disponible(s)",
+    "fromLabel": "à partir de",
+    "totalForNights": "total {nights} nuit(s)",
+    "priceCalculating": "Calcul du total en cours",
+    "unnamedHotel": "Hôtel",
+    "unknownCity": "Ville non précisée",
+    "badgeAvailable": "Disponibilité réelle",
+    "badgeFreeCancellation": "Annulation gratuite",
+    "densityLabel": "Densité d’affichage",
+    "densityComfortable": "Confort",
+    "densityCompact": "Dense",
+    "emptyTitle": "Aucun hôtel disponible",
+    "emptyBody": "Essayez d’élargir vos dates ou de choisir une autre destination.",
+    "emptyNearbyTitle": "Aucun hôtel disponible à proximité",
+    "emptyNearbyBody": "Essayez d’élargir vos dates ou d’étendre la zone de recherche.",
+    "emptyCta": "Modifier ma recherche",
+    "errorTitle": "La recherche a échoué",
+    "errorBody": "Une erreur est survenue. Réessayez dans un instant.",
+    "degradedTitle": "Service momentanément indisponible",
+    "degradedBody": "Nous ne pouvons pas vérifier les disponibilités pour le moment. Réessayez dans quelques instants.",
+    "retry": "Réessayer",
+    "invalidTitle": "Recherche invalide",
+    "invalidBody": "Vérifiez la destination, les dates et le nombre de voyageurs.",
+    "invalidCta": "Revenir à l’accueil"
   }
 }

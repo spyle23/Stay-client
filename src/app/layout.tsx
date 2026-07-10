@@ -5,6 +5,7 @@ import { NextIntlClientProvider } from "next-intl";
 import { getLocale, getMessages } from "next-intl/server";
 import "./globals.css";
 import { ThemeProvider } from "@/components/providers/theme-provider";
+import { QueryProvider } from "@/components/providers/query-provider";
 import { CurrencyProvider } from "@/contexts/currency-context";
 import { Toaster } from "@/components/ui/sonner";
 import {
@@ -60,8 +61,10 @@ export default async function RootLayout({
             disableTransitionOnChange
           >
             <CurrencyProvider initialCurrency={initialCurrency}>
-              {children}
-              <Toaster />
+              <QueryProvider>
+                {children}
+                <Toaster />
+              </QueryProvider>
             </CurrencyProvider>
           </ThemeProvider>
         </NextIntlClientProvider>
