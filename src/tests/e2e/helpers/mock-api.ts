@@ -20,6 +20,7 @@ export interface MockHotel {
   latitude: number | null;
   longitude: number | null;
   distanceKm: number | null;
+  amenities: string[];
 }
 
 export function sampleHotel(overrides: Partial<MockHotel> = {}): MockHotel {
@@ -38,6 +39,7 @@ export function sampleHotel(overrides: Partial<MockHotel> = {}): MockHotel {
     latitude: null,
     longitude: null,
     distanceKm: null,
+    amenities: [],
     ...overrides,
   };
 }

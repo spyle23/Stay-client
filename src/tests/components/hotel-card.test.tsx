@@ -21,6 +21,7 @@ const hotel: HotelAvailabilityResult = {
   latitude: null,
   longitude: null,
   distanceKm: null,
+  amenities: [],
 };
 
 function renderFr(ui: React.ReactNode) {
@@ -75,5 +76,19 @@ describe("HotelCard", () => {
   it("n'affiche pas de distance quand distanceKm est null (mode destination)", () => {
     renderFr(<HotelCard hotel={hotel} />);
     expect(screen.queryByTestId("hotel-card-distance")).toBeNull();
+  });
+
+  // Story 1.9 (AC-12) : la carte devient un lien vers la fiche hôtel.
+  it("est un lien vers la fiche hôtel quand href est fourni", () => {
+    renderFr(<HotelCard hotel={hotel} href="/hotels/hotel-a-h1?guests=2" />);
+    const card = screen.getByTestId("hotel-card");
+    expect(card.tagName).toBe("A");
+    expect(card.getAttribute("href")).toContain("/hotels/hotel-a-h1");
+    expect(card.getAttribute("href")).toContain("guests=2");
+  });
+
+  it("reste un article (non-lien) quand href est absent", () => {
+    renderFr(<HotelCard hotel={hotel} />);
+    expect(screen.getByTestId("hotel-card").tagName).toBe("ARTICLE");
   });
 });

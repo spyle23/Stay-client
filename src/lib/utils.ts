@@ -29,11 +29,17 @@ export function formatCurrency(
     );
   }
   const major = amountMinor / 10 ** minorUnitExponent(currency);
-  return new Intl.NumberFormat(locale, {
-    style: "currency",
-    currency,
-    trailingZeroDisplay: "stripIfInteger",
-  }).format(major);
+  try {
+    return new Intl.NumberFormat(locale, {
+      style: "currency",
+      currency,
+      trailingZeroDisplay: "stripIfInteger",
+    }).format(major);
+  } catch {
+    // Code devise invalide/inconnu (hors ISO 4217) → repli sûr « montant CODE », jamais
+    // d'exception (la page hôtel affiche la devise propre de l'hôtel, story 1.9).
+    return `${new Intl.NumberFormat(locale).format(major)} ${currency}`;
+  }
 }
 
 /**

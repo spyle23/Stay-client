@@ -47,6 +47,20 @@ describe("utils: formatCurrency (unités mineures / cents)", () => {
   it("refuse les montants non entiers (garde AR-12 : jamais de flottant)", () => {
     expect(() => formatCurrency(168.5, "EUR", "fr")).toThrow();
   });
+
+  // Story 1.9 : devise propre de l'hôtel à 0 décimale (JPY) — l'unité mineure EST le yen.
+  it("formate une devise à 0 décimale sans division erronée (JPY)", () => {
+    const out = formatCurrency(12000, "JPY", "en");
+    expect(out).toMatch(/12,000/); // 12000 (exposant 0), pas 120
+    expect(out).not.toContain(".00");
+  });
+
+  it("ne lève jamais sur un code devise invalide (repli montant + code)", () => {
+    expect(() => formatCurrency(16800, "INVALID_CODE", "fr")).not.toThrow();
+    const out = formatCurrency(16800, "INVALID_CODE", "fr");
+    expect(out).toContain("INVALID_CODE");
+    expect(out).toMatch(/168/);
+  });
 });
 
 describe("utils: formatDate", () => {

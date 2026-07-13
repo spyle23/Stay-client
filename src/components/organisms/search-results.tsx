@@ -2,6 +2,7 @@
 
 import { useState } from "react";
 import Link from "next/link";
+import { useRouter } from "next/navigation";
 import { SearchXIcon } from "lucide-react";
 import { useTranslations } from "next-intl";
 
@@ -9,12 +10,17 @@ import {
   HotelCard,
   type HotelCardDensity,
 } from "@/components/molecules/hotel-card";
+import { ResultsToolbar } from "@/components/organisms/results-toolbar";
 import { Button, buttonVariants } from "@/components/ui/button";
 import { Skeleton } from "@/components/ui/skeleton";
 import { useHotelSearch } from "@/hooks/use-hotel-search";
+import { useSearchFacets } from "@/hooks/use-search-facets";
 import { ApiClientError } from "@/lib/api-client";
 import { cn } from "@/lib/utils";
+import { buildHotelPageUrl } from "@/services/catalog.service";
 import {
+  buildResultsUrl,
+  hasActiveFilters,
   isNearbyParams,
   type SearchHotelsParams,
 } from "@/services/search.service";
@@ -28,9 +34,25 @@ const SKELETON_COUNT = 6;
  */
 export function SearchResults({ params }: { params: SearchHotelsParams }) {
   const t = useTranslations("results");
+  const router = useRouter();
   const [density, setDensity] = useState<HotelCardDensity>("comfortable");
   const query = useHotelSearch(params);
+  const facets = useSearchFacets(params);
   const nearby = isNearbyParams(params);
+
+  function resetFilters() {
+    router.push(
+      buildResultsUrl({
+        ...params,
+        minPrice: undefined,
+        maxPrice: undefined,
+        minCapacity: undefined,
+        category: undefined,
+        amenities: undefined,
+      }),
+      { scroll: false },
+    );
+  }
 
   const gridClass = cn(
     "grid gap-4",
@@ -83,8 +105,38 @@ export function SearchResults({ params }: { params: SearchHotelsParams }) {
   }
 
   const { items, totalCount } = query.data;
+  const filtersActive = hasActiveFilters(params);
 
   if (items.length === 0) {
+    // Vide APRÈS filtrage → « desserrer les filtres » (distinct du vide de recherche 1.6/1.7).
+    if (filtersActive) {
+      return (
+        <div className="flex flex-col gap-4">
+          <ResultsToolbar params={params} facets={facets} />
+          <div
+            data-testid="results-empty-filtered"
+            className="flex flex-col items-center gap-3 rounded-xl bg-card p-8 text-center ring-1 ring-border"
+          >
+            <SearchXIcon
+              className="size-8 text-muted-foreground"
+              aria-hidden="true"
+            />
+            <p className="text-h3 text-foreground">{t("emptyFilteredTitle")}</p>
+            <p className="max-w-md text-body text-muted-foreground">
+              {t("emptyFilteredBody")}
+            </p>
+            <Button
+              type="button"
+              variant="outline"
+              onClick={resetFilters}
+              data-testid="results-reset-filters"
+            >
+              {t("resetFilters")}
+            </Button>
+          </div>
+        </div>
+      );
+    }
     return (
       <div
         data-testid="results-empty"
@@ -109,6 +161,7 @@ export function SearchResults({ params }: { params: SearchHotelsParams }) {
 
   return (
     <div className="flex flex-col gap-4">
+      <ResultsToolbar params={params} facets={facets} />
       <div className="flex flex-wrap items-center justify-between gap-3">
         <p
           aria-live="polite"
@@ -126,6 +179,7 @@ export function SearchResults({ params }: { params: SearchHotelsParams }) {
             type="button"
             size="sm"
             variant={density === "comfortable" ? "default" : "ghost"}
+            className="min-h-(--tap-min)"
             onClick={() => setDensity("comfortable")}
             data-testid="density-comfortable"
           >
@@ -135,6 +189,7 @@ export function SearchResults({ params }: { params: SearchHotelsParams }) {
             type="button"
             size="sm"
             variant={density === "compact" ? "default" : "ghost"}
+            className="min-h-(--tap-min)"
             onClick={() => setDensity("compact")}
             data-testid="density-compact"
           >
@@ -145,7 +200,17 @@ export function SearchResults({ params }: { params: SearchHotelsParams }) {
 
       <div data-testid="results-grid" className={gridClass}>
         {items.map((hotel) => (
-          <HotelCard key={hotel.hotelId} hotel={hotel} density={density} />
+          <HotelCard
+            key={hotel.hotelId}
+            hotel={hotel}
+            density={density}
+            href={buildHotelPageUrl(hotel.hotelId, hotel.name, {
+              checkInDate: params.checkInDate,
+              checkOutDate: params.checkOutDate,
+              guests: params.guests,
+              currency: params.currency,
+            })}
+          />
         ))}
       </div>
     </div>

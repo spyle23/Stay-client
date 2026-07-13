@@ -44,6 +44,32 @@ const GEO_ERROR_KEY: Record<GeolocationFailureReason, string> = {
   insecure: "geolocationUnsupported",
 };
 
+/**
+ * Filtres/tri à **préserver** quand on relance une recherche depuis la barre collante (story 1.8) :
+ * ajuster les dates/voyageurs ne doit pas effacer l'affinage en cours (AC-3).
+ */
+const CARRIED_FILTER_KEYS = [
+  "sort",
+  "minPrice",
+  "maxPrice",
+  "minCapacity",
+  "category",
+  "amenities",
+] as const;
+
+/** Reporte, depuis l'URL courante, les params `keys` (valeurs répétées incluses) dans `target`. */
+function carryParams(target: URLSearchParams, keys: readonly string[]): void {
+  if (typeof window === "undefined") {
+    return;
+  }
+  const current = new URLSearchParams(window.location.search);
+  for (const key of keys) {
+    for (const value of current.getAll(key)) {
+      target.append(key, value);
+    }
+  }
+}
+
 function isoToDate(iso?: string): Date | undefined {
   if (!iso) {
     return undefined;
@@ -128,6 +154,8 @@ export function SearchBar({
       guests: String(guests),
       currency,
     });
+    // Préserve l'affinage en cours (filtres + tri) au re-submit depuis les résultats.
+    carryParams(params, CARRIED_FILTER_KEYS);
     router.push(`/search?${params.toString()}`);
   }
 
@@ -164,6 +192,8 @@ export function SearchBar({
       guests: String(guests),
       currency,
     });
+    // Préserve l'affinage (filtres + tri) ET le rayon éventuel au re-lancement « autour de moi ».
+    carryParams(params, [...CARRIED_FILTER_KEYS, "radiusKm"]);
     router.push(`/search?${params.toString()}`);
   }
 

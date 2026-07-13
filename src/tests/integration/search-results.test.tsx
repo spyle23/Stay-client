@@ -8,6 +8,11 @@ import type { HotelAvailabilityResult } from "@/services/search.service";
 import type { SearchHotelsParams } from "@/services/search.service";
 import frMessages from "@/i18n/messages/fr.json";
 
+// La barre d'outils de filtres (story 1.8) utilise `useRouter` — mock App Router.
+vi.mock("next/navigation", () => ({
+  useRouter: () => ({ push: vi.fn() }),
+}));
+
 const params: SearchHotelsParams = {
   destination: "Antananarivo",
   checkInDate: "2999-01-02",
@@ -31,6 +36,7 @@ const sample: HotelAvailabilityResult = {
   latitude: null,
   longitude: null,
   distanceKm: null,
+  amenities: [],
 };
 
 function okResponse(hotels: HotelAvailabilityResult[]) {
@@ -106,6 +112,22 @@ describe("SearchResults (intégration React Query ↔ BFF mocké)", () => {
     renderResults();
     await waitFor(() =>
       expect(screen.getByTestId("results-empty")).toBeInTheDocument(),
+    );
+  });
+
+  it("affiche la barre d'outils de filtres au succès", async () => {
+    vi.stubGlobal("fetch", vi.fn().mockResolvedValue(okResponse([sample])));
+    renderResults();
+    await waitFor(() =>
+      expect(screen.getByTestId("results-toolbar")).toBeInTheDocument(),
+    );
+  });
+
+  it("état vide filtré (desserrer les filtres) quand un filtre est actif et 0 résultat", async () => {
+    vi.stubGlobal("fetch", vi.fn().mockResolvedValue(okResponse([])));
+    renderResults({ ...params, minPrice: 50000 });
+    await waitFor(() =>
+      expect(screen.getByTestId("results-empty-filtered")).toBeInTheDocument(),
     );
   });
 

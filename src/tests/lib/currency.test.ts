@@ -38,4 +38,17 @@ describe("currency: socle devise de travail", () => {
     expect(minorUnitExponent("USD")).toBe(2);
     expect(minorUnitExponent("XYZ")).toBe(2);
   });
+
+  // Story 1.9 : la page hôtel affiche la devise PROPRE de l'hôtel (potentiellement ≠ EUR/USD).
+  // L'exposant est dérivé de l'ICU, pas supposé à 2.
+  it("dérive l'exposant réel des devises hors EUR/USD (JPY = 0, BHD/KWD = 3)", () => {
+    expect(minorUnitExponent("JPY")).toBe(0);
+    expect(minorUnitExponent("BHD")).toBe(3);
+    expect(minorUnitExponent("KWD")).toBe(3);
+  });
+
+  it("retombe sûrement sur 2 pour un code devise invalide, sans lever", () => {
+    expect(() => minorUnitExponent("INVALID_CODE")).not.toThrow();
+    expect(minorUnitExponent("INVALID_CODE")).toBe(2);
+  });
 });

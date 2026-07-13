@@ -1,11 +1,11 @@
 "use client";
 
-import { useState } from "react";
-import Image from "next/image";
-import { Building2Icon, MapPinIcon, StarIcon } from "lucide-react";
+import Link from "next/link";
+import { MapPinIcon, StarIcon } from "lucide-react";
 import { useLocale, useTranslations } from "next-intl";
 
 import { PriceTag } from "@/components/atoms/price-tag";
+import { RemoteImage } from "@/components/atoms/remote-image";
 import { TrustBadge } from "@/components/atoms/trust-badge";
 import { cn } from "@/lib/utils";
 import type { HotelAvailabilityResult } from "@/services/search.service";
@@ -17,14 +17,17 @@ export type HotelCardDensity = "comfortable" | "compact";
  * Expose nom, ville, note de catégorie (texte libre PMS), photo (`logoUrl` ou placeholder)
  * et prix « à partir de » (total du séjour, une seule devise). Deux densités (confort/dense).
  *
- * Présentation seule en 1.6 : la navigation vers la fiche hôtel arrive en story 1.9
- * (route `(public)/hotels/[…]` non encore livrée) — pas de lien mort ici.
+ * Depuis la story 1.9, la carte est un **lien** vers la fiche hôtel (`href`) : le nom (`h3`)
+ * porte le nom accessible du lien (UX-DR-2.2 « carte = lien »). Sans `href`, elle reste un
+ * simple `article` (rétro-compatibilité).
  */
 export function HotelCard({
   hotel,
+  href,
   density = "comfortable",
 }: {
   hotel: HotelAvailabilityResult;
+  href?: string;
   density?: HotelCardDensity;
 }) {
   const t = useTranslations("results");
@@ -41,20 +44,18 @@ export function HotelCard({
         )
       : null;
 
-  return (
-    <article
-      data-testid="hotel-card"
-      data-hotel-id={hotel.hotelId}
-      data-density={density}
-      className={cn(
-        "group/hotel-card flex overflow-hidden rounded-xl bg-card text-card-foreground shadow-soft ring-1 ring-border transition-shadow hover:shadow-elevated",
-        compact ? "flex-row" : "flex-col",
-      )}
-    >
-      <HotelThumbnail
+  const cardClass = cn(
+    "group/hotel-card flex overflow-hidden rounded-xl bg-card text-card-foreground shadow-soft ring-1 ring-border transition-shadow hover:shadow-elevated focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-ring",
+    compact ? "flex-row" : "flex-col",
+  );
+
+  const inner = (
+    <>
+      <RemoteImage
         src={hotel.thumbnailUrl}
         alt={name}
-        className={compact ? "w-40 shrink-0" : "w-full"}
+        sizes="(max-width: 768px) 100vw, (max-width: 1024px) 50vw, 33vw"
+        className={cn("aspect-[4/3]", compact ? "w-40 shrink-0" : "w-full")}
       />
 
       <div className="flex flex-1 flex-col gap-2 p-4">
@@ -104,49 +105,31 @@ export function HotelCard({
           />
         </div>
       </div>
-    </article>
+    </>
   );
-}
 
-function HotelThumbnail({
-  src,
-  alt,
-  className,
-}: {
-  src: string | null;
-  alt: string;
-  className?: string;
-}) {
-  // Repli placeholder si l'URL est absente OU si le chargement échoue (URL cassée/relative).
-  const [errored, setErrored] = useState(false);
+  if (href) {
+    return (
+      <Link
+        href={href}
+        data-testid="hotel-card"
+        data-hotel-id={hotel.hotelId}
+        data-density={density}
+        className={cardClass}
+      >
+        {inner}
+      </Link>
+    );
+  }
+
   return (
-    <div
-      className={cn(
-        "relative aspect-[4/3] overflow-hidden bg-muted",
-        className,
-      )}
+    <article
+      data-testid="hotel-card"
+      data-hotel-id={hotel.hotelId}
+      data-density={density}
+      className={cardClass}
     >
-      {src !== null && !errored ? (
-        // `unoptimized` : les logos d'hôtels proviennent d'hôtes arbitraires (PMS `/files`)
-        // → pas de config `remotePatterns` requise, pas d'avertissement de loader. La passe
-        // d'optimisation/CDN (NFR-13) est traitée en Epic 6.
-        <Image
-          src={src}
-          alt={alt}
-          fill
-          unoptimized
-          sizes="(max-width: 768px) 100vw, (max-width: 1024px) 50vw, 33vw"
-          className="object-cover"
-          onError={() => setErrored(true)}
-        />
-      ) : (
-        <div
-          className="flex h-full w-full items-center justify-center text-muted-foreground"
-          aria-hidden="true"
-        >
-          <Building2Icon className="size-8" />
-        </div>
-      )}
-    </div>
+      {inner}
+    </article>
   );
 }

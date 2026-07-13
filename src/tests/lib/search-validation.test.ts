@@ -2,6 +2,7 @@ import { describe, expect, it } from "vitest";
 
 import {
   parseDateOnlyUtc,
+  parseFilters,
   parseSearchParams,
   validateCoords,
   validateSearchInput,
@@ -184,5 +185,63 @@ describe("validateCoords", () => {
   });
   it("coordsInvalid si hors bornes", () => {
     expect(validateCoords(91, 200)).toEqual(["coordsInvalid"]);
+  });
+});
+
+describe("parseFilters (FR-3 — filtres/tri d'URL, jamais bloquants)", () => {
+  it("sort connu conservé, sort inconnu ignoré", () => {
+    expect(parseFilters({ sort: "price_asc" }).sort).toBe("price_asc");
+    expect(parseFilters({ sort: "lol" }).sort).toBeUndefined();
+  });
+
+  it("prix : entiers ≥ 0, bornes incohérentes (min > max) ignorées", () => {
+    expect(
+      parseFilters({ minPrice: "15000", maxPrice: "40000" }),
+    ).toMatchObject({ minPrice: 15000, maxPrice: 40000 });
+    expect(parseFilters({ minPrice: "-5" }).minPrice).toBeUndefined();
+    // Incohérent → les deux bornes omises.
+    const incoherent = parseFilters({ minPrice: "40000", maxPrice: "15000" });
+    expect(incoherent.minPrice).toBeUndefined();
+    expect(incoherent.maxPrice).toBeUndefined();
+  });
+
+  it("capacité bornée [1,30]", () => {
+    expect(parseFilters({ minCapacity: "4" }).minCapacity).toBe(4);
+    expect(parseFilters({ minCapacity: "99" }).minCapacity).toBeUndefined();
+  });
+
+  it("catégorie : répété dé-dupliqué, virgule NON scindée ; équipements : CSV autorisé", () => {
+    expect(
+      parseFilters({ category: ["4-star", "Boutique", "4-STAR"] }).category,
+    ).toEqual(["4-star", "Boutique"]);
+    // Catégorie contenant une virgule (texte libre) → NON scindée.
+    expect(parseFilters({ category: "Boutique, Luxury" }).category).toEqual([
+      "Boutique, Luxury",
+    ]);
+    // Équipements : CSV autorisé + dédup casse-insensible.
+    expect(parseFilters({ amenities: "WiFi,wifi,Parking" }).amenities).toEqual([
+      "WiFi",
+      "Parking",
+    ]);
+    expect(parseFilters({ category: "" }).category).toBeUndefined();
+  });
+
+  it("parseSearchParams porte les filtres sans jamais invalider sur un filtre douteux", () => {
+    const result = parseSearchParams({
+      destination: "Antananarivo",
+      checkInDate: "2999-01-02",
+      checkOutDate: "2999-01-05",
+      guests: "2",
+      currency: "EUR",
+      sort: "lol", // invalide → ignoré, pas d'échec de page
+      minPrice: "10000",
+      category: "Boutique",
+    });
+    expect(result.ok).toBe(true);
+    if (result.ok) {
+      expect(result.value.sort).toBeUndefined();
+      expect(result.value.minPrice).toBe(10000);
+      expect(result.value.category).toEqual(["Boutique"]);
+    }
   });
 });
