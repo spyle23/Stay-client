@@ -1,12 +1,16 @@
 import { afterEach, describe, expect, it, vi } from "vitest";
 
 import {
+  buildBookingUrl,
   buildHotelPageUrl,
+  buildRoomPageUrl,
   catalogKeys,
   fetchHotelDetail,
+  fetchRoomDetail,
 } from "@/services/catalog.service";
 
 const HOTEL_ID = "3fa85f64-5717-4562-b3fc-2c963f66afa6";
+const ROOM_ID = "22222222-2222-2222-2222-222222222222";
 
 function mockHotelResponse() {
   return {
@@ -22,6 +26,26 @@ function mockHotelResponse() {
           gallery: [],
           rooms: [{ id: "r1", pricePerNight: 12000 }],
           roomsUnavailable: false,
+        },
+      }),
+  };
+}
+
+function mockRoomResponse() {
+  return {
+    ok: true,
+    status: 200,
+    json: () =>
+      Promise.resolve({
+        success: true,
+        data: {
+          id: ROOM_ID,
+          hotelId: HOTEL_ID,
+          currency: "EUR",
+          images: [],
+          includedServices: [],
+          available: true,
+          availabilityDegraded: false,
         },
       }),
   };
@@ -100,5 +124,73 @@ describe("catalog.service", () => {
     expect(key[1]).toBe("hotel");
     expect(key[2]).toBe(HOTEL_ID);
     expect(key[3]).toEqual(params);
+  });
+
+  // --- Story 1.10 : fiche chambre --------------------------------------------------------
+  it("fetchRoomDetail appelle /catalog/hotels/:hotelId/rooms/:roomId avec dates+voyageurs", async () => {
+    const mockFetch = vi.fn().mockResolvedValue(mockRoomResponse());
+    vi.stubGlobal("fetch", mockFetch);
+
+    const result = await fetchRoomDetail(HOTEL_ID, ROOM_ID, {
+      checkInDate: "2999-01-02",
+      checkOutDate: "2999-01-04",
+      guests: 2,
+    });
+
+    expect(result.id).toBe(ROOM_ID);
+    const url = String(mockFetch.mock.calls[0][0]);
+    expect(url).toContain(`/catalog/hotels/${HOTEL_ID}/rooms/${ROOM_ID}?`);
+    expect(url).toContain("checkInDate=2999-01-02");
+    expect(url).toContain("guests=2");
+  });
+
+  it("fetchRoomDetail n'émet aucun param hors liste (garde whitelist BFF)", async () => {
+    const mockFetch = vi.fn().mockResolvedValue(mockRoomResponse());
+    vi.stubGlobal("fetch", mockFetch);
+
+    await fetchRoomDetail(HOTEL_ID, ROOM_ID, { checkInDate: "2999-01-02" });
+
+    const url = String(mockFetch.mock.calls[0][0]);
+    expect(url).not.toContain("currency=");
+  });
+
+  it("buildRoomPageUrl : /hotels/{slug}/rooms/{roomId} avec dates/voyageurs/devise préservés", () => {
+    const url = buildRoomPageUrl(HOTEL_ID, ROOM_ID, "Hôtel de la Paix", {
+      checkInDate: "2999-01-02",
+      checkOutDate: "2999-01-04",
+      guests: 2,
+      currency: "USD",
+    });
+    expect(url).toContain(
+      `/hotels/hotel-de-la-paix-${HOTEL_ID}/rooms/${ROOM_ID}`,
+    );
+    expect(url).toContain("checkInDate=2999-01-02");
+    expect(url).toContain("guests=2");
+    expect(url).toContain("currency=USD");
+  });
+
+  it("buildBookingUrl : /booking conservant hôtel/chambre/dates/voyageurs/devise (AC-3)", () => {
+    const url = buildBookingUrl(HOTEL_ID, ROOM_ID, {
+      checkInDate: "2999-01-02",
+      checkOutDate: "2999-01-04",
+      guests: 2,
+      currency: "EUR",
+    });
+    expect(url.startsWith("/booking?")).toBe(true);
+    expect(url).toContain(`hotelId=${HOTEL_ID}`);
+    expect(url).toContain(`roomId=${ROOM_ID}`);
+    expect(url).toContain("checkInDate=2999-01-02");
+    expect(url).toContain("guests=2");
+    expect(url).toContain("currency=EUR");
+  });
+
+  it("catalogKeys.room porte le préfixe, les ids et les params", () => {
+    const params = { checkInDate: "2999-01-02" };
+    const key = catalogKeys.room(HOTEL_ID, ROOM_ID, params);
+    expect(key[0]).toBe("catalog");
+    expect(key[1]).toBe("room");
+    expect(key[2]).toBe(HOTEL_ID);
+    expect(key[3]).toBe(ROOM_ID);
+    expect(key[4]).toEqual(params);
   });
 });

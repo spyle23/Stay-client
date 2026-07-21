@@ -120,6 +120,19 @@
     "freeCancellation": "Annulation gratuite",
     "perNight": "par nuit",
     "totalForNights": "total {nights} nuit(s)",
-    "bookSoon": "Bientôt disponible"
+    "backToHotel": "Retour à l’hôtel",
+    "roomMetaTitle": "{category} — {hotel}",
+    "roomMetaDescription": "Réservez {category} à {hotel} : disponibilité réelle, prix clairs et confirmation immédiate.",
+    "descriptionLabel": "Description de la chambre",
+    "includedServicesLabel": "Services inclus",
+    "floor": "Étage {floor}",
+    "bookNow": "Réserver",
+    "unavailableForDates": "Cette chambre n’est pas disponible pour ces dates.",
+    "unavailable": "Cette chambre n’est pas disponible actuellement.",
+    "availabilityToConfirm": "Disponibilité confirmée à l’étape suivante.",
+    "roomNotFoundTitle": "Chambre introuvable",
+    "roomNotFoundBody": "Cette chambre n’existe pas ou n’est plus disponible.",
+    "roomErrorTitle": "Chambre indisponible",
+    "roomErrorBody": "Nous ne pouvons pas charger cette chambre pour le moment. Réessayez dans quelques instants."
   }
 }

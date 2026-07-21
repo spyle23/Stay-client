@@ -74,11 +74,59 @@ export interface HotelDetailParams {
   guests?: number;
 }
 
+/**
+ * Contexte préservé dans les URL navigateur (page hôtel → fiche chambre → tunnel) : dates,
+ * voyageurs **et** devise de travail. La devise n'est pas envoyée au BFF (les prix restent dans la
+ * devise de l'Hôtel) mais suit dans l'URL pour que retour/partage conservent le contexte.
+ */
+export type StayContext = HotelDetailParams & { currency?: string };
+
+/** Service **inclus** dans la chambre (niveau chambre — miroir `RoomIncludedService` du BFF). */
+export interface RoomIncludedService {
+  name: string;
+  quantity: number | null;
+  notes: string | null;
+}
+
+/** Photo de la chambre (déjà triée primaire d'abord — miroir `RoomPhoto` du BFF). */
+export interface RoomPhoto {
+  url: string;
+}
+
+/** Détail d'une chambre (story 1.10 — miroir `RoomDetailDto` du BFF). */
+export interface RoomDetailResult {
+  id: string;
+  hotelId: string;
+  hotelName: string | null;
+  hotelCity: string | null;
+  number: string | null;
+  category: string | null;
+  /** `null` si le PMS ne renseigne pas la capacité (ne jamais afficher « 0 voyageur »). */
+  capacity: number | null;
+  amenities: string | null;
+  floor: number | null;
+  description: string | null;
+  includedServices: RoomIncludedService[];
+  images: RoomPhoto[];
+  /** Prix par nuit (unités mineures), dans la devise de l'Hôtel. */
+  pricePerNight: number;
+  /** Total du séjour (unités mineures) ; `null` si aucune date en contexte. */
+  totalPrice: number | null;
+  currency: string;
+  nights: number | null;
+  /** Chambre **sélectionnable** pour les dates en contexte. */
+  available: boolean;
+  /** Disponibilité datée indéterminée (panne PMS) — jamais « indisponible » (afficher un avis). */
+  availabilityDegraded: boolean;
+}
+
 /** Convention de clés React Query. */
 export const catalogKeys = {
   all: ["catalog"] as const,
   hotel: (id: string, params: HotelDetailParams) =>
     ["catalog", "hotel", id, params] as const,
+  room: (hotelId: string, roomId: string, params: HotelDetailParams) =>
+    ["catalog", "room", hotelId, roomId, params] as const,
 };
 
 /**
@@ -120,7 +168,7 @@ export function fetchHotelDetail(
 export function buildHotelPageUrl(
   id: string,
   name: string | null,
-  ctx: HotelDetailParams & { currency?: string } = {},
+  ctx: StayContext = {},
 ): string {
   const slug = buildHotelSlug(name, id);
   const query = new URLSearchParams(toQueryString(ctx));
@@ -129,4 +177,59 @@ export function buildHotelPageUrl(
   }
   const qs = query.toString();
   return qs ? `/hotels/${slug}?${qs}` : `/hotels/${slug}`;
+}
+
+/** Récupère le détail d'une chambre (par GUID hôtel + GUID chambre) pour les dates en contexte. */
+export function fetchRoomDetail(
+  hotelId: string,
+  roomId: string,
+  params: HotelDetailParams = {},
+): Promise<RoomDetailResult> {
+  const qs = toQueryString(params);
+  const suffix = qs ? `?${qs}` : "";
+  return api.get<RoomDetailResult>(
+    `/catalog/hotels/${encodeURIComponent(hotelId)}/rooms/${encodeURIComponent(
+      roomId,
+    )}${suffix}`,
+  );
+}
+
+/**
+ * URL **navigateur** de la fiche chambre `/hotels/{slug}/rooms/{roomId}` (route imbriquée sous le
+ * slug hôtel : le hotelId est requis pour composer la fiche, et le retour reste non destructif). Le
+ * contexte (dates/voyageurs/devise) est préservé comme sur `buildHotelPageUrl` (AC-3/AC-7).
+ */
+export function buildRoomPageUrl(
+  hotelId: string,
+  roomId: string,
+  hotelName: string | null,
+  ctx: StayContext = {},
+): string {
+  const slug = buildHotelSlug(hotelName, hotelId);
+  const query = new URLSearchParams(toQueryString(ctx));
+  if (ctx.currency) {
+    query.set("currency", ctx.currency);
+  }
+  const qs = query.toString();
+  const base = `/hotels/${slug}/rooms/${roomId}`;
+  return qs ? `${base}?${qs}` : base;
+}
+
+/**
+ * URL du **tunnel de réservation** `(tunnel)/booking` (placeholder Epic 2) en conservant
+ * **hôtel + chambre + dates + voyageurs + devise** (AC-3 : sélection → tunnel sans re-saisie).
+ * L'état de tunnel durable relève d'Epic 2 (Redis BFF) ; ici le contexte voyage par l'URL (deep-link).
+ */
+export function buildBookingUrl(
+  hotelId: string,
+  roomId: string,
+  ctx: StayContext = {},
+): string {
+  const query = new URLSearchParams(toQueryString(ctx));
+  query.set("hotelId", hotelId);
+  query.set("roomId", roomId);
+  if (ctx.currency) {
+    query.set("currency", ctx.currency);
+  }
+  return `/booking?${query.toString()}`;
 }

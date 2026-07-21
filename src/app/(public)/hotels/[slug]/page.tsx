@@ -5,11 +5,13 @@ import { getTranslations } from "next-intl/server";
 
 import { HotelDetail } from "@/components/organisms/hotel-detail";
 import { ApiClientError } from "@/lib/api-client";
+import { isCurrency } from "@/lib/currency";
 import { extractHotelId } from "@/lib/hotel-slug";
 import { buildJsonLd, serializeJsonLd } from "@/lib/hotel-json-ld";
 import {
   fetchHotelDetail,
   type HotelDetailResult,
+  type StayContext,
 } from "@/services/catalog.service";
 
 type SearchParams = Record<string, string | string[] | undefined>;
@@ -81,11 +83,14 @@ const loadHotel = cache(
 async function resolveContext(props: Props) {
   const [{ slug }, sp] = await Promise.all([props.params, props.searchParams]);
   const id = extractHotelId(slug);
+  const currency = firstStr(sp.currency);
   return {
     id,
     checkInDate: firstStr(sp.checkInDate),
     checkOutDate: firstStr(sp.checkOutDate),
     guests: parseGuests(sp.guests),
+    // Devise de travail préservée dans l'URL (contexte du lien vers la fiche chambre), jamais au BFF.
+    currency: currency && isCurrency(currency) ? currency : undefined,
   };
 }
 
@@ -132,7 +137,8 @@ export async function generateMetadata(props: Props): Promise<Metadata> {
  */
 export default async function HotelPage(props: Props) {
   const t = await getTranslations("hotel");
-  const { id, checkInDate, checkOutDate, guests } = await resolveContext(props);
+  const { id, checkInDate, checkOutDate, guests, currency } =
+    await resolveContext(props);
   if (!id) {
     notFound();
   }
@@ -158,6 +164,8 @@ export default async function HotelPage(props: Props) {
     );
   }
 
+  const context: StayContext = { checkInDate, checkOutDate, guests, currency };
+
   return (
     <main className="flex flex-1 flex-col">
       <script
@@ -166,7 +174,7 @@ export default async function HotelPage(props: Props) {
           __html: serializeJsonLd(buildJsonLd(result.hotel)),
         }}
       />
-      <HotelDetail hotel={result.hotel} />
+      <HotelDetail hotel={result.hotel} context={context} />
     </main>
   );
 }

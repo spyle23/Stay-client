@@ -1,55 +1,45 @@
 "use client";
 
+import Link from "next/link";
 import { UsersIcon } from "lucide-react";
 import { useTranslations } from "next-intl";
 
 import { PriceTag } from "@/components/atoms/price-tag";
 import { TrustBadge } from "@/components/atoms/trust-badge";
-import { Button } from "@/components/ui/button";
-import type { HotelRoomResult } from "@/services/catalog.service";
-
-/** Nombre max d'équipements affichés sur une carte. */
-const MAX_AMENITIES = 6;
-
-/**
- * Équipements de chambre (texte libre CSV du PMS) → tokens nettoyés et **dé-dupliqués**.
- *
- * ⚠️ On ne scinde **pas** sur `/` : « 24/7 room service » deviendrait deux badges « 24 » et
- * « 7 room service ». La dé-duplication évite en outre des clés React en collision sur un CSV
- * comportant un doublon (« Wifi, Wifi »).
- */
-export function parseAmenities(raw: string | null): string[] {
-  if (!raw) {
-    return [];
-  }
-  const seen = new Set<string>();
-  const out: string[] = [];
-  for (const part of raw.split(/[,;]/)) {
-    const token = part.trim();
-    if (token.length === 0) {
-      continue;
-    }
-    const key = token.toLowerCase();
-    if (seen.has(key)) {
-      continue;
-    }
-    seen.add(key);
-    out.push(token);
-    if (out.length === MAX_AMENITIES) {
-      break;
-    }
-  }
-  return out;
-}
+import { buttonVariants } from "@/components/ui/button";
+import { parseAmenities } from "@/lib/amenities";
+import { cn } from "@/lib/utils";
+import {
+  buildRoomPageUrl,
+  type HotelRoomResult,
+  type StayContext,
+} from "@/services/catalog.service";
 
 /**
  * Chambre réservable sur la fiche hôtel (UX-DR-2.3) : capacité, équipements, prix (total du séjour
  * si dates, sinon prix/nuit — devise de l'Hôtel), badge d'annulation. **Repli D2** (AC-6) : le badge
- * « Annulation gratuite » est **générique** (la politique ferme par hôtel n'est pas exposée). **Pas
- * de lien mort** (AC-12/Décision 7) : le CTA « Réserver » (fiche chambre = story 1.10) est rendu
- * **désactivé** (« bientôt disponible ») tant que 1.10 n'est pas livrée.
+ * « Annulation gratuite » est **générique** (la politique ferme par hôtel n'est pas exposée).
+ *
+ * Le CTA « Réserver » est un **lien** vers la fiche chambre `/hotels/{slug}/rooms/{roomId}` (story
+ * 1.10), en conservant le contexte de séjour (dates/voyageurs/devise). Les chambres listées ici
+ * étant déjà filtrées « disponibles » par le BFF, le lien est toujours valide (**pas de lien mort**,
+ * AC-12/Décision 7).
  */
-export function RoomCard({ room }: { room: HotelRoomResult }) {
+export function RoomCard({
+  room,
+  hotelId,
+  hotelName,
+  context = {},
+}: {
+  room: HotelRoomResult;
+  /**
+   * GUID de l'hôtel **garanti valide** (résolu par la page). Préféré à `room.hotelId`, que le BFF
+   * coerce en `''` si le PMS l'omet — un slug sans GUID de fin produirait un lien mort (404).
+   */
+  hotelId?: string;
+  hotelName?: string | null;
+  context?: StayContext;
+}) {
   const t = useTranslations("hotel");
   const amenities = parseAmenities(room.amenities);
   const hasTotal = room.totalPrice !== null && room.nights !== null;
@@ -108,15 +98,18 @@ export function RoomCard({ room }: { room: HotelRoomResult }) {
           }
           data-testid="room-card-price"
         />
-        <Button
-          type="button"
-          disabled
-          aria-disabled="true"
-          className="min-h-(--tap-min) w-full sm:w-auto"
+        <Link
+          href={buildRoomPageUrl(
+            hotelId ?? room.hotelId,
+            room.id,
+            hotelName ?? null,
+            context,
+          )}
+          className={cn(buttonVariants(), "min-h-(--tap-min) w-full sm:w-auto")}
           data-testid="room-card-cta"
         >
-          {t("bookSoon")}
-        </Button>
+          {t("bookNow")}
+        </Link>
       </div>
     </article>
   );

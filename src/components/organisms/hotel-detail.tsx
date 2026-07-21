@@ -4,7 +4,10 @@ import { useTranslations } from "next-intl";
 import { RoomCard } from "@/components/molecules/room-card";
 import { HotelGallery } from "@/components/organisms/hotel-gallery";
 import { HotelLocation } from "@/components/organisms/hotel-location";
-import type { HotelDetailResult } from "@/services/catalog.service";
+import type {
+  HotelDetailResult,
+  StayContext,
+} from "@/services/catalog.service";
 
 /**
  * Fiche hôtel publique (UX-DR-3.3). Rendu **SSR** (Server Component async) assemblant identité,
@@ -15,7 +18,13 @@ import type { HotelDetailResult } from "@/services/catalog.service";
  * États chambres : dégradation PMS (`roomsUnavailable`) ≠ « aucune chambre » ≠ liste. Sans dates
  * en contexte, une invitation à choisir des dates accompagne les prix par nuit (Décision 4).
  */
-export function HotelDetail({ hotel }: { hotel: HotelDetailResult }) {
+export function HotelDetail({
+  hotel,
+  context = {},
+}: {
+  hotel: HotelDetailResult;
+  context?: StayContext;
+}) {
   const t = useTranslations("hotel");
   const name = hotel.name ?? t("unnamed");
   const locationLine = [hotel.city, hotel.country]
@@ -106,7 +115,12 @@ export function HotelDetail({ hotel }: { hotel: HotelDetailResult }) {
                 <ul className="flex flex-col gap-3">
                   {hotel.rooms.map((room) => (
                     <li key={room.id}>
-                      <RoomCard room={room} />
+                      <RoomCard
+                        room={room}
+                        hotelId={hotel.id}
+                        hotelName={hotel.name}
+                        context={context}
+                      />
                     </li>
                   ))}
                 </ul>

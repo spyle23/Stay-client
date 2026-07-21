@@ -120,6 +120,19 @@
     "freeCancellation": "Free cancellation",
     "perNight": "per night",
     "totalForNights": "total for {nights} night(s)",
-    "bookSoon": "Coming soon"
+    "backToHotel": "Back to hotel",
+    "roomMetaTitle": "{category} — {hotel}",
+    "roomMetaDescription": "Book {category} at {hotel}: real availability, clear prices and instant confirmation.",
+    "descriptionLabel": "Room description",
+    "includedServicesLabel": "Included services",
+    "floor": "Floor {floor}",
+    "bookNow": "Book now",
+    "unavailableForDates": "This room isn’t available for these dates.",
+    "unavailable": "This room isn’t available right now.",
+    "availabilityToConfirm": "Availability confirmed at the next step.",
+    "roomNotFoundTitle": "Room not found",
+    "roomNotFoundBody": "This room doesn’t exist or is no longer available.",
+    "roomErrorTitle": "Room unavailable",
+    "roomErrorBody": "We can’t load this room right now. Please try again in a few moments."
   }
 }
