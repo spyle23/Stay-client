@@ -134,5 +134,33 @@
     "roomNotFoundBody": "Cette chambre n’existe pas ou n’est plus disponible.",
     "roomErrorTitle": "Chambre indisponible",
     "roomErrorBody": "Nous ne pouvons pas charger cette chambre pour le moment. Réessayez dans quelques instants."
+  },
+  "auth": {
+    "metaTitle": "Connexion — Hotelerie",
+    "metaDescription": "Connectez-vous à votre compte voyageur pour retrouver vos réservations.",
+    "title": "Connexion",
+    "subtitle": "Accédez à votre compte voyageur.",
+    "emailLabel": "Adresse e-mail",
+    "emailPlaceholder": "vous@exemple.com",
+    "passwordLabel": "Mot de passe",
+    "passwordPlaceholder": "Votre mot de passe",
+    "submit": "Se connecter",
+    "submitting": "Connexion…",
+    "errorInvalidCredentials": "Adresse e-mail ou mot de passe incorrect.",
+    "errorForbiddenRole": "Ce compte n’est pas un compte voyageur. Utilisez l’espace professionnel.",
+    "errorUnavailable": "Service momentanément indisponible. Réessayez dans un instant.",
+    "errorGeneric": "La connexion a échoué. Réessayez."
+  },
+  "account": {
+    "title": "Mon compte",
+    "signedInAs": "Connecté en tant que {email}",
+    "comingSoon": "Vos réservations et vos factures apparaîtront ici prochainement.",
+    "logout": "Se déconnecter",
+    "logoutPending": "Déconnexion…",
+    "loading": "Chargement de votre session…",
+    "redirecting": "Redirection vers la connexion…",
+    "logoutError": "La déconnexion a échoué. Réessayez.",
+    "unavailable": "Votre espace client est momentanément indisponible.",
+    "retry": "Réessayer"
   }
 }

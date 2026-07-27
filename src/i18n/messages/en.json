@@ -134,5 +134,33 @@
     "roomNotFoundBody": "This room doesn’t exist or is no longer available.",
     "roomErrorTitle": "Room unavailable",
     "roomErrorBody": "We can’t load this room right now. Please try again in a few moments."
+  },
+  "auth": {
+    "metaTitle": "Sign in — Hotelerie",
+    "metaDescription": "Sign in to your traveller account to find your bookings.",
+    "title": "Sign in",
+    "subtitle": "Access your traveller account.",
+    "emailLabel": "Email address",
+    "emailPlaceholder": "you@example.com",
+    "passwordLabel": "Password",
+    "passwordPlaceholder": "Your password",
+    "submit": "Sign in",
+    "submitting": "Signing in…",
+    "errorInvalidCredentials": "Incorrect email address or password.",
+    "errorForbiddenRole": "This is not a traveller account. Please use the professional workspace.",
+    "errorUnavailable": "Service temporarily unavailable. Please try again shortly.",
+    "errorGeneric": "Sign-in failed. Please try again."
+  },
+  "account": {
+    "title": "My account",
+    "signedInAs": "Signed in as {email}",
+    "comingSoon": "Your bookings and invoices will appear here soon.",
+    "logout": "Sign out",
+    "logoutPending": "Signing out…",
+    "loading": "Loading your session…",
+    "redirecting": "Redirecting to sign in…",
+    "logoutError": "Sign-out failed. Please try again.",
+    "unavailable": "Your account area is temporarily unavailable.",
+    "retry": "Try again"
   }
 }
