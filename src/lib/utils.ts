@@ -55,3 +55,33 @@ export function formatDate(iso: string, locale = "fr"): string {
     timeZone: "UTC",
   }).format(new Date(iso));
 }
+
+/**
+ * Formate un **instant** ISO 8601 (date + heure, UTC sur le fil) en conservant l'heure.
+ *
+ * Distinct de `formatDate`, réservé aux date-only : appliquer un rendu date-only à une échéance
+ * horaire (limite d'annulation, expiration de hold) **efface l'heure** et laisse croire que la
+ * journée entière est acquise — un contresens facturable. Rendu en UTC avec le fuseau visible,
+ * pour que l'échéance affichée soit celle qui fera foi (revue 2.2).
+ *
+ * Renvoie `null` si la valeur n'est pas un instant exploitable : `Intl.DateTimeFormat.format`
+ * **lève** un `RangeError` sur une `Invalid Date`, et une donnée amont douteuse ne doit pas
+ * pouvoir faire tomber l'écran qui précède le paiement.
+ */
+export function formatDateTime(iso: string, locale = "fr"): string | null {
+  const parsed = new Date(iso);
+  if (Number.isNaN(parsed.getTime())) {
+    return null;
+  }
+  // Champs explicites (et non `dateStyle`/`timeStyle`) : la spec ECMA-402 **interdit** de les
+  // combiner avec `timeZoneName`, et `Intl.DateTimeFormat` lève un `TypeError` si on le tente.
+  return new Intl.DateTimeFormat(locale, {
+    year: "numeric",
+    month: "short",
+    day: "numeric",
+    hour: "2-digit",
+    minute: "2-digit",
+    timeZone: "UTC",
+    timeZoneName: "short",
+  }).format(parsed);
+}

@@ -58,6 +58,23 @@ function renderForm(next = "/account") {
   );
 }
 
+/** Variante **in situ** (story 2.3) : le formulaire ne navigue pas, il rend la main à l'appelant. */
+function renderInlineForm(props: {
+  onSuccess: () => void;
+  defaultEmail?: string;
+}) {
+  const queryClient = new QueryClient({
+    defaultOptions: { queries: { retry: false }, mutations: { retry: false } },
+  });
+  return render(
+    <NextIntlClientProvider locale="fr" messages={frMessages}>
+      <QueryClientProvider client={queryClient}>
+        <LoginForm {...props} />
+      </QueryClientProvider>
+    </NextIntlClientProvider>,
+  );
+}
+
 function fill(testId: string, value: string) {
   fireEvent.change(screen.getByTestId(testId), { target: { value } });
 }
@@ -216,5 +233,94 @@ describe("LoginForm (intégration)", () => {
     renderForm("/account");
 
     await waitFor(() => expect(replace).toHaveBeenCalledWith("/account"));
+  });
+});
+
+/**
+ * Mode **in situ** (story 2.3) : l'onglet « J'ai un compte » du tunnel réutilise ce formulaire
+ * sans quitter la page — une navigation ferait perdre le récapitulatif persistant et rejouerait
+ * la course « handler contre effet de garde » diagnostiquée en 2.1.
+ *
+ * Ce mode n'était couvert par **aucun** test : une régression `router.replace` serait passée
+ * inaperçue à travers toutes les portes.
+ */
+describe("LoginForm — mode in situ (onSuccess)", () => {
+  const SESSION_OK = {
+    body: {
+      success: true,
+      data: {
+        authenticated: true,
+        user: {
+          userId: "u-1",
+          email: "voyageur@example.com",
+          firstName: "Rakoto",
+          lastName: null,
+        },
+      },
+    },
+  };
+
+  beforeEach(() => {
+    replace.mockReset();
+    refresh.mockReset();
+  });
+
+  afterEach(() => {
+    cleanup();
+    vi.unstubAllGlobals();
+  });
+
+  it("connexion réussie → appelle onSuccess et ne navigue JAMAIS", async () => {
+    stubFetch({ login: SESSION_OK });
+    const onSuccess = vi.fn();
+    renderInlineForm({ onSuccess });
+
+    fill("login-email", "voyageur@example.com");
+    fill("login-password", "secret123");
+    submit();
+
+    await waitFor(() => expect(onSuccess).toHaveBeenCalledTimes(1));
+    expect(replace).not.toHaveBeenCalled();
+    expect(refresh).not.toHaveBeenCalled();
+  });
+
+  it("déjà connecté → aucune redirection : c’est l’appelant qui pilote l’affichage", async () => {
+    stubFetch({ session: SESSION_OK });
+    const onSuccess = vi.fn();
+    renderInlineForm({ onSuccess });
+
+    await screen.findByTestId("login-form");
+    await waitFor(() => expect(replace).not.toHaveBeenCalled());
+    expect(onSuccess).not.toHaveBeenCalled();
+  });
+
+  it("échec de connexion → message générique, onSuccess non appelé", async () => {
+    stubFetch({ login: { status: 401, body: { success: false } } });
+    const onSuccess = vi.fn();
+    renderInlineForm({ onSuccess });
+
+    fill("login-email", "voyageur@example.com");
+    fill("login-password", "mauvais");
+    submit();
+
+    await waitFor(() =>
+      expect(screen.getByTestId("login-error")).toHaveTextContent(
+        frMessages.auth.errorInvalidCredentials,
+      ),
+    );
+    expect(onSuccess).not.toHaveBeenCalled();
+    expect(replace).not.toHaveBeenCalled();
+  });
+
+  it("pré-remplit l’email fourni (reprise après collision)", async () => {
+    stubFetch({});
+    renderInlineForm({
+      onSuccess: vi.fn(),
+      defaultEmail: "invite@example.com",
+    });
+
+    expect(await screen.findByTestId("login-email")).toHaveValue(
+      "invite@example.com",
+    );
   });
 });

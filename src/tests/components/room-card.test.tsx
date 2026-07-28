@@ -93,9 +93,15 @@ describe("RoomCard", () => {
     expect(href).not.toContain("/hotels//"); // jamais un segment hôtel vide
   });
 
-  it("affiche le badge d'annulation gratuite (repli D2) et les équipements", () => {
+  /**
+   * Story 2.2 : plus aucune promesse d'annulation gratuite ici. Le PMS n'expose pas de politique
+   * par hôtel (D2) — les conditions sont présentées **avant paiement** au récapitulatif du tunnel
+   * (`CancellationPolicyDisclosure`), jamais affirmées sur une carte.
+   */
+  it("affiche les équipements, sans aucune promesse d'annulation gratuite", () => {
     renderFr(<RoomCard room={baseRoom} />);
-    expect(document.querySelector('[data-trust-badge="free"]')).not.toBeNull();
+    expect(document.querySelector('[data-trust-badge="free"]')).toBeNull();
+    expect(screen.queryByText(/annulation gratuite/i)).toBeNull();
     expect(screen.getByText("Wifi")).toBeInTheDocument();
     expect(screen.getByText("Climatisation")).toBeInTheDocument();
   });

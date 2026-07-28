@@ -87,9 +87,12 @@ export function HotelCard({
           ) : null}
         </div>
 
+        {/* « Disponibilité réelle » est factuel (la liste est availability-first). En revanche,
+            aucun badge « annulation gratuite » : le PMS n'expose aucune politique par hôtel
+            (dépendance D2) — les conditions sont présentées avant paiement dans le tunnel
+            (story 2.2, FR-7/FR-22). Promettre une gratuité sans donnée = dark pattern (UX-DR-9.5). */}
         <div className="flex flex-wrap gap-1.5">
           <TrustBadge variant="avail" label={t("badgeAvailable")} />
-          <TrustBadge variant="free" label={t("badgeFreeCancellation")} />
         </div>
 
         <div className="mt-auto flex flex-col gap-0.5 pt-2">

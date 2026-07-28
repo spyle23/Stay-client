@@ -7,10 +7,27 @@ import { defaultCurrency, isCurrency, type Currency } from "@/lib/currency";
 
 export const DATE_ONLY = /^\d{4}-\d{2}-\d{2}$/;
 
+const MS_PER_DAY = 86_400_000;
+
 // Bornes voyageurs — source unique (le BFF applique `@Min(1)`/`@Max(30)`). Réutilisées par
 // `GuestSelector`. Vérifiées ici pour rejeter une URL éditée (`?guests=99`) côté client.
 export const MIN_GUESTS = 1;
 export const MAX_GUESTS = 30;
+
+/**
+ * Durée maximale d'un séjour, en nuits — **miroir** de `BOOKING_MAX_STAY_NIGHTS` /
+ * `CATALOG_MAX_STAY_NIGHTS` côté BFF (défaut 90).
+ *
+ * Même parti pris que `MIN_GUESTS`/`MAX_GUESTS` ci-dessus : la règle est dupliquée côté front pour
+ * qu'une URL éditée ou une plage aberrante soit refusée **sans appel réseau** (AC-8), et pour que
+ * le `DateRangePicker` cesse de proposer une plage que le BFF rejettera.
+ *
+ * ⚠️ Si la borne du BFF est modifiée par variable d'environnement, **mettre à jour cette
+ * constante** : une valeur front plus permissive laisse partir un appel voué au 400 (rendu
+ * proprement, mais inutile) ; une valeur plus stricte refuserait un séjour pourtant acceptable.
+ * Documenté dans `stay-client-bff/.env.example`.
+ */
+export const MAX_STAY_NIGHTS = 90;
 
 /** Parse une date-only `AAAA-MM-JJ` en timestamp UTC minuit, ou `null` si invalide. */
 export function parseDateOnlyUtc(value: string): number | null {
@@ -41,6 +58,7 @@ export type SearchValidationError =
   | "datesRequired"
   | "checkInPast"
   | "checkOutBeforeCheckIn"
+  | "stayTooLong"
   | "guestsMin"
   | "guestsMax"
   | "coordsRequired"
@@ -75,6 +93,13 @@ export function validateDatesGuests(
     }
     if (checkOut <= checkIn) {
       errors.push("checkOutBeforeCheckIn");
+    } else if (
+      Math.round((checkOut - checkIn) / MS_PER_DAY) > MAX_STAY_NIGHTS
+    ) {
+      // Séjour hors bornes : le BFF le refuse en 400 (et `catalog` l'écarterait silencieusement
+      // en retombant sur un prix/nuit). Le rejeter ici évite un aller-retour inutile ET donne à
+      // l'utilisateur la vraie raison, que le code HTTP seul ne porte pas (revue 2.2).
+      errors.push("stayTooLong");
     }
   }
 

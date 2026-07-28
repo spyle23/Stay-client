@@ -14,6 +14,7 @@ import {
 } from "@/components/ui/popover";
 import { cn } from "@/lib/utils";
 import { formatDate } from "@/lib/utils";
+import { MAX_STAY_NIGHTS } from "@/lib/validations/search";
 
 /** Date locale (jour choisi au calendrier) → `AAAA-MM-JJ`, sans décalage de fuseau. */
 export function dateToIsoDateOnly(date: Date): string {
@@ -83,9 +84,14 @@ export function DateRangePicker({
         <span className="truncate">{label}</span>
       </PopoverTrigger>
       <PopoverContent align="start" className="w-auto p-0">
+        {/* `max` : le calendrier ne propose pas une plage que le BFF refusera en 400 (borne
+            `MAX_STAY_NIGHTS`, miroir de `BOOKING_MAX_STAY_NIGHTS` — revue 2.2). `react-day-picker`
+            compte les jours sélectionnés, arrivée ET départ inclus : une plage de N nuits occupe
+            N+1 jours. */}
         <Calendar
           mode="range"
           numberOfMonths={1}
+          max={MAX_STAY_NIGHTS + 1}
           selected={value}
           onSelect={handleSelect}
           disabled={{ before: today }}

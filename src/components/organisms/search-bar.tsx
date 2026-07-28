@@ -23,6 +23,7 @@ import { useCurrency } from "@/hooks/use-currency";
 import { useGeolocation } from "@/hooks/use-geolocation";
 import type { GeolocationFailureReason } from "@/lib/geolocation";
 import {
+  MAX_STAY_NIGHTS,
   validateDatesGuests,
   validateSearchInput,
   type SearchValidationError,
@@ -199,7 +200,10 @@ export function SearchBar({
 
   const has = (code: SearchValidationError) => errors.includes(code);
   const dateInvalid =
-    has("datesRequired") || has("checkInPast") || has("checkOutBeforeCheckIn");
+    has("datesRequired") ||
+    has("checkInPast") ||
+    has("checkOutBeforeCheckIn") ||
+    has("stayTooLong");
   // Disponible sur les DEUX variantes (hero + sticky) quand activé : permet de raffiner/relancer
   // une recherche proximité depuis la page de résultats (les dates y sont pré-remplies).
   const showNearMe = geolocationEnabled;
@@ -305,7 +309,9 @@ export function SearchBar({
         >
           <ul className="flex flex-col gap-0.5">
             {errors.map((code) => (
-              <li key={code}>{t(`errors.${code}`)}</li>
+              <li key={code}>
+                {t(`errors.${code}`, { max: MAX_STAY_NIGHTS })}
+              </li>
             ))}
           </ul>
         </div>

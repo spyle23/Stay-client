@@ -216,9 +216,11 @@ export function buildRoomPageUrl(
 }
 
 /**
- * URL du **tunnel de réservation** `(tunnel)/booking` (placeholder Epic 2) en conservant
+ * URL de la **première étape du tunnel** `(tunnel)/booking/recap` (story 2.2) en conservant
  * **hôtel + chambre + dates + voyageurs + devise** (AC-3 : sélection → tunnel sans re-saisie).
- * L'état de tunnel durable relève d'Epic 2 (Redis BFF) ; ici le contexte voyage par l'URL (deep-link).
+ * Le contexte voyage par l'URL (deep-link, rechargeable) ; l'état de tunnel serveur n'apparaît
+ * qu'à la création de la Réservation `Pending` (story 2.4). `/booking` reste servie et redirige
+ * ici, pour que les liens émis avant la story 2.2 continuent de fonctionner.
  */
 export function buildBookingUrl(
   hotelId: string,
@@ -231,5 +233,5 @@ export function buildBookingUrl(
   if (ctx.currency) {
     query.set("currency", ctx.currency);
   }
-  return `/booking?${query.toString()}`;
+  return `/booking/recap?${query.toString()}`;
 }

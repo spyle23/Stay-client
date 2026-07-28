@@ -3,7 +3,12 @@ import { renderHook, waitFor } from "@testing-library/react";
 import { QueryClient, QueryClientProvider } from "@tanstack/react-query";
 import type { ReactNode } from "react";
 
-import { useLogin, useLogout, useSession } from "@/hooks/use-session";
+import {
+  useGuestCheckout,
+  useLogin,
+  useLogout,
+  useSession,
+} from "@/hooks/use-session";
 import { authKeys } from "@/services/auth.service";
 
 const SESSION = {
@@ -86,6 +91,32 @@ describe("use-session", () => {
     await waitFor(() =>
       expect(queryClient.getQueryData(authKeys.session)).toEqual(SESSION),
     );
+  });
+
+  it("useGuestCheckout alimente le cache de session (story 2.3)", async () => {
+    const fetchMock = vi
+      .fn()
+      .mockResolvedValue(jsonResponse({ success: true, data: SESSION }));
+    vi.stubGlobal("fetch", fetchMock);
+    const { queryClient, wrapper } = makeWrapper();
+
+    const { result } = renderHook(() => useGuestCheckout(), { wrapper });
+    result.current.mutate({
+      email: "invite@example.com",
+      firstName: "Hery",
+      lastName: "Rakoto",
+      phone: "+261340000000",
+    });
+
+    // Le corps de la réponse EST le nouvel état : il est posé directement dans le cache, sans
+    // second aller-retour. C'est CETTE assertion qui porte la garantie.
+    await waitFor(() =>
+      expect(queryClient.getQueryData(authKeys.session)).toEqual(SESSION),
+    );
+    // ⚠️ Complément, pas preuve : `renderHook` ne monte aucun observateur de `authKeys.session`,
+    // donc une `invalidateQueries` ne déclencherait ici aucun refetch — cette assertion passerait
+    // aussi dans le cas qu'elle semble interdire. Elle ne vaut que comme garde anti-appel parasite.
+    expect(fetchMock).toHaveBeenCalledTimes(1);
   });
 
   it("useLogout purge TOUT le cache puis repose l’état anonyme (poste partagé)", async () => {

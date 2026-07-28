@@ -7,6 +7,8 @@ import {
   fetchSession,
   login,
   logout,
+  provisionGuest,
+  type GuestCheckoutInput,
   type LoginCredentials,
   type SessionState,
 } from "@/services/auth.service";
@@ -45,6 +47,21 @@ export function useLogin() {
     mutationFn: (credentials: LoginCredentials) => login(credentials),
     onSuccess: (state: SessionState) => {
       // Le corps de la réponse EST le nouvel état : on évite un aller-retour supplémentaire.
+      queryClient.setQueryData(authKeys.session, state);
+    },
+  });
+}
+
+/**
+ * Checkout invité (story 2.3 — FR-8). Même contrat que `useLogin` : le BFF renvoie l'état de
+ * session, on le pose directement dans le cache — pas d'invalidation (qui déclencherait un
+ * aller-retour superflu et pourrait afficher un état « anonyme » transitoire dans le tunnel).
+ */
+export function useGuestCheckout() {
+  const queryClient = useQueryClient();
+  return useMutation({
+    mutationFn: (input: GuestCheckoutInput) => provisionGuest(input),
+    onSuccess: (state: SessionState) => {
       queryClient.setQueryData(authKeys.session, state);
     },
   });

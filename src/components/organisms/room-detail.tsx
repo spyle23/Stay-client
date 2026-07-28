@@ -10,7 +10,6 @@ import {
 import { useTranslations } from "next-intl";
 
 import { PriceTag } from "@/components/atoms/price-tag";
-import { TrustBadge } from "@/components/atoms/trust-badge";
 import { HotelGallery } from "@/components/organisms/hotel-gallery";
 import { buttonVariants } from "@/components/ui/button";
 import { parseAmenities } from "@/lib/amenities";
@@ -34,7 +33,9 @@ import {
  * - `availabilityDegraded` (dispo datée indéterminée) → avis discret, jamais « indisponible ».
  *
  * **Replis** : services d'hôtel gated D9 non affichés (seuls les `includedServices` de la chambre,
- * publics) ; annulation = badge **générique** (D2 — politique ferme non exposée).
+ * publics). **Aucune promesse d'annulation** (story 2.2, AC-6) : sans politique exposée par le PMS
+ * (D2), la fiche n'affirme rien — l'information d'annulation n'apparaît qu'au récapitulatif, avant
+ * paiement, portée par `CancellationPolicyDisclosure`.
  */
 export function RoomDetail({
   room,
@@ -184,7 +185,10 @@ export function RoomDetail({
             data-testid="room-detail-price"
           />
 
-          <TrustBadge variant="free" label={t("freeCancellation")} />
+          {/* Aucun badge « annulation gratuite » : le PMS n'expose aucune politique par hôtel
+              (dépendance D2). Les conditions d'annulation sont présentées **avant paiement** par
+              `CancellationPolicyDisclosure` au récapitulatif du tunnel (story 2.2, FR-7/FR-22) —
+              une gratuité annoncée sans donnée serait une promesse fausse (UX-DR-9.5). */}
 
           {/* Avis de disponibilité — ordre CRITIQUE : `availabilityDegraded` d'abord. Une panne du
               cross-check daté ne doit JAMAIS s'afficher « indisponible pour ces dates » (AC-6) ;

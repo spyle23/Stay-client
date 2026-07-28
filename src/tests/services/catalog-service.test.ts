@@ -169,14 +169,16 @@ describe("catalog.service", () => {
     expect(url).toContain("currency=USD");
   });
 
-  it("buildBookingUrl : /booking conservant hôtel/chambre/dates/voyageurs/devise (AC-3)", () => {
+  // Story 2.2 : la cible est la 1ʳᵉ étape du tunnel (`/booking/recap`) ; `/booking` reste servie
+  // et redirige, pour que les liens émis avant 2.2 continuent de fonctionner.
+  it("buildBookingUrl : /booking/recap conservant hôtel/chambre/dates/voyageurs/devise (AC-3)", () => {
     const url = buildBookingUrl(HOTEL_ID, ROOM_ID, {
       checkInDate: "2999-01-02",
       checkOutDate: "2999-01-04",
       guests: 2,
       currency: "EUR",
     });
-    expect(url.startsWith("/booking?")).toBe(true);
+    expect(url.startsWith("/booking/recap?")).toBe(true);
     expect(url).toContain(`hotelId=${HOTEL_ID}`);
     expect(url).toContain(`roomId=${ROOM_ID}`);
     expect(url).toContain("checkInDate=2999-01-02");

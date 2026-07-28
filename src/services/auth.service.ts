@@ -14,6 +14,7 @@ import { api, ApiClientError } from "@/lib/api-client";
 
 export const AUTH_ENDPOINTS = {
   login: "/auth/login",
+  guest: "/auth/guest",
   session: "/auth/session",
   logout: "/auth/logout",
 } as const;
@@ -59,6 +60,38 @@ export async function login(
   credentials: LoginCredentials,
 ): Promise<SessionState> {
   return api.post<SessionState>(AUTH_ENDPOINTS.login, credentials);
+}
+
+/**
+ * Coordonnées du **Checkout invité** (story 2.3 — FR-8). Aucun mot de passe : le BFF provisionne
+ * le compte léger avec un secret généré côté serveur, que le navigateur ne voit jamais.
+ */
+export interface GuestCheckoutInput {
+  email: string;
+  firstName: string;
+  lastName: string;
+  phone: string;
+}
+
+/**
+ * Provisionne (ou réutilise) l'identité invité et ouvre la session.
+ *
+ * Le contrat de réponse est **identique** à `login` : un seul modèle de session côté front.
+ * `409` = un compte existe déjà avec cet email → inviter à se connecter (FR-8), jamais créer
+ * un doublon silencieux.
+ */
+export async function provisionGuest(
+  input: GuestCheckoutInput,
+): Promise<SessionState> {
+  return api.post<SessionState>(AUTH_ENDPOINTS.guest, input);
+}
+
+/**
+ * Le BFF réserve **409** à la collision d'email. Tout autre 4xx est une saisie refusée : les
+ * confondre enverrait le voyageur se connecter à un compte qui n'existe pas.
+ */
+export function isEmailConflict(error: unknown): boolean {
+  return error instanceof ApiClientError && error.status === 409;
 }
 
 /**

@@ -5,7 +5,6 @@ import { UsersIcon } from "lucide-react";
 import { useTranslations } from "next-intl";
 
 import { PriceTag } from "@/components/atoms/price-tag";
-import { TrustBadge } from "@/components/atoms/trust-badge";
 import { buttonVariants } from "@/components/ui/button";
 import { parseAmenities } from "@/lib/amenities";
 import { cn } from "@/lib/utils";
@@ -17,8 +16,12 @@ import {
 
 /**
  * Chambre réservable sur la fiche hôtel (UX-DR-2.3) : capacité, équipements, prix (total du séjour
- * si dates, sinon prix/nuit — devise de l'Hôtel), badge d'annulation. **Repli D2** (AC-6) : le badge
- * « Annulation gratuite » est **générique** (la politique ferme par hôtel n'est pas exposée).
+ * si dates, sinon prix/nuit — devise de l'Hôtel), disponibilité réelle.
+ *
+ * **Aucune promesse d'annulation ici** (story 2.2, AC-6) : le PMS n'expose aucune politique par
+ * hôtel (D2 non livré), donc un badge « Annulation gratuite » serait une affirmation sans donnée.
+ * La seule information d'annulation du parcours est la `CancellationPolicyDisclosure` du
+ * récapitulatif, avant paiement — en repli explicite tant que D2 n'est pas livré.
  *
  * Le CTA « Réserver » est un **lien** vers la fiche chambre `/hotels/{slug}/rooms/{roomId}` (story
  * 1.10), en conservant le contexte de séjour (dates/voyageurs/devise). Les chambres listées ici
@@ -83,7 +86,10 @@ export function RoomCard({
             ))}
           </ul>
         ) : null}
-        <TrustBadge variant="free" label={t("freeCancellation")} />
+        {/* Aucun badge « annulation gratuite » : le PMS n'expose aucune politique par hôtel
+            (dépendance D2). Les conditions d'annulation sont présentées **avant paiement** par
+            `CancellationPolicyDisclosure` dans le tunnel (story 2.2, FR-7/FR-22) — annoncer une
+            gratuité sans donnée serait une promesse fausse (UX-DR-9.5). */}
       </div>
 
       <div className="flex flex-col items-start gap-2 sm:items-end">

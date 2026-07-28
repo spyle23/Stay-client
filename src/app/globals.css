@@ -153,6 +153,9 @@
   /* Rayons (base), cible tactile & élévation */
   --radius: 0.625rem; /* 10px — base boutons/inputs */
   --tap-min: 44px; /* cible tactile minimale (WCAG 2.5.5) */
+  /* Hauteur max d'une barre collante mobile (récapitulatif du tunnel) : elle doit rester
+     consultable sans jamais confisquer l'écran au contenu qu'elle accompagne. */
+  --sticky-bar-max-h: 70vh;
   --ds-shadow: 0 6px 24px rgba(16, 23, 32, 0.08);
   --ds-shadow-sm: 0 2px 8px rgba(16, 23, 32, 0.06);
 

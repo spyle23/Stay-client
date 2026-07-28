@@ -15,6 +15,9 @@ import { zodFieldValidator } from "@/lib/validations/rhf";
 /**
  * Formulaire de connexion (story 2.1 — FR-19, UX-DR-3.12 / 7.7 / 5.8 / 5.9).
  *
+ * Deux usages : la page `/login` (navigation vers `next`) et l'onglet « J'ai un compte » de
+ * l'étape d'identification du tunnel (story 2.3, mode `onSuccess` sans navigation).
+ *
  * Sécurité & confiance :
  * - aucun jeton n'est manipulé ici : le BFF pose un cookie **opaque HttpOnly** (NFR-8) ;
  * - le message d'échec est **générique et i18n** — on ne relaie jamais le texte du PMS, qui
@@ -27,11 +30,24 @@ import { zodFieldValidator } from "@/lib/validations/rhf";
  */
 
 interface LoginFormProps {
-  /** Destination post-connexion, **déjà validée** comme chemin interne. */
-  next: string;
+  /**
+   * Destination post-connexion, **déjà validée** comme chemin interne. Ignorée quand
+   * `onSuccess` est fourni (le formulaire ne navigue alors plus lui-même).
+   */
+  next?: string;
+  /**
+   * Mode **in situ** (story 2.3, étape d'identification du tunnel) : appelé au lieu de naviguer.
+   *
+   * Dans le tunnel, une navigation ferait perdre le récapitulatif persistant et rejouerait une
+   * page entière pour un changement d'état local. L'appelant recompose son écran à partir de la
+   * session, que la mutation vient de mettre à jour dans le cache.
+   */
+  onSuccess?: () => void;
+  /** Valeur initiale du champ email (pré-remplissage après collision d'email — story 2.3). */
+  defaultEmail?: string;
 }
 
-export function LoginForm({ next }: LoginFormProps) {
+export function LoginForm({ next, onSuccess, defaultEmail }: LoginFormProps) {
   const t = useTranslations("auth");
   const router = useRouter();
   const schema = useLoginSchema();
@@ -47,23 +63,33 @@ export function LoginForm({ next }: LoginFormProps) {
     handleSubmit,
     formState: { errors, isSubmitting },
   } = useForm<LoginFormValues>({
-    defaultValues: { email: "", password: "" },
+    defaultValues: { email: defaultEmail ?? "", password: "" },
     mode: "onSubmit",
   });
 
   // Déjà connecté (session ouverte dans un autre onglet, retour arrière) : ne pas proposer
   // un formulaire inutile — on rejoint directement la destination.
+  // En mode in situ, c'est l'appelant qui décide de l'affichage : ne jamais naviguer d'ici,
+  // sous peine de rejouer la course « handler vs effet de garde » diagnostiquée en 2.1.
   useEffect(() => {
-    if (session?.authenticated) {
+    if (
+      onSuccess === undefined &&
+      next !== undefined &&
+      session?.authenticated
+    ) {
       router.replace(next);
     }
-  }, [session?.authenticated, next, router]);
+  }, [session?.authenticated, next, onSuccess, router]);
 
   const onSubmit = handleSubmit(async (values) => {
     setFormError(null);
     try {
       await login.mutateAsync(values);
-      router.replace(next);
+      if (onSuccess) {
+        onSuccess();
+        return;
+      }
+      router.replace(next ?? "/");
       // Rafraîchit les Server Components (la garde `proxy.ts` voit désormais le cookie).
       router.refresh();
     } catch (error) {

@@ -75,7 +75,7 @@ describe("RoomDetail (intégration)", () => {
     const cta = screen.getByTestId("room-book-cta");
     expect(cta.tagName).toBe("A");
     const href = cta.getAttribute("href") ?? "";
-    expect(href).toContain("/booking?");
+    expect(href).toContain("/booking/recap?");
     expect(href).toContain(`hotelId=${HOTEL_ID}`);
     expect(href).toContain(`roomId=${ROOM_ID}`);
     expect(href).toContain("checkInDate=2999-01-02");

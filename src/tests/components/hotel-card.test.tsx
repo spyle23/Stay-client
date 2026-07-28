@@ -47,10 +47,17 @@ describe("HotelCard", () => {
     expect(screen.getByTestId("hotel-card-price").textContent).toContain("240");
   });
 
-  it("affiche les badges de confiance (disponibilité + annulation)", () => {
+  /**
+   * Story 2.2 : le badge « annulation gratuite » a été retiré. Le PMS n'expose aucune politique
+   * par hôtel (dépendance D2) — promettre une gratuité sans donnée est un dark pattern
+   * (UX-DR-9.5). Les conditions sont désormais présentées avant paiement, dans le tunnel.
+   * Seul « Disponibilité réelle » subsiste : il est factuel (liste availability-first).
+   */
+  it("affiche le badge de disponibilité, et AUCUNE promesse d'annulation gratuite", () => {
     renderFr(<HotelCard hotel={hotel} />);
     expect(document.querySelector('[data-trust-badge="avail"]')).not.toBeNull();
-    expect(document.querySelector('[data-trust-badge="free"]')).not.toBeNull();
+    expect(document.querySelector('[data-trust-badge="free"]')).toBeNull();
+    expect(screen.queryByText(/annulation gratuite/i)).toBeNull();
   });
 
   it("bascule en densité compacte via la prop", () => {
