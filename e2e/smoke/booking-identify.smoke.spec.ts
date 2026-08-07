@@ -87,10 +87,25 @@ async function goToIdentify(page: Page): Promise<void> {
   await expect(page).toHaveURL(/\/booking\/identify\?/);
 }
 
+/** Créations de réservation réellement émises — l'invariant « jamais au montage » (AC-10). */
+function watchCreations(page: Page): string[] {
+  const creations: string[] = [];
+  page.on("request", (req) => {
+    if (
+      req.method() === "POST" &&
+      req.url().includes("/api/v1/booking/reservations")
+    ) {
+      creations.push(req.url());
+    }
+  });
+  return creations;
+}
+
 test("Checkout invité contre le vrai PMS : compte provisionné, session opaque, passage au paiement", async ({
   page,
 }) => {
   const failures = watchForFailures(page);
+  const creations = watchCreations(page);
   // Email unique : le PMS impose l'unicité et ce compte reste en base (cf. dette 2.1).
   const email = `smoke-2-3-${Date.now()}@example.com`;
 
@@ -121,9 +136,19 @@ test("Checkout invité contre le vrai PMS : compte provisionné, session opaque,
 
   // AC-1/AC-8 : la session est ouverte et le tunnel continue, contexte préservé.
   await expect(page).toHaveURL(/\/booking\/payment\?/, { timeout: 20_000 });
-  await expect(page.getByTestId("booking-payment-placeholder")).toBeVisible();
+  // Depuis la story 2.4, l'étape suivante propose la création réelle de la réservation. Le smoke
+  // de 2.3 s'arrête ici : créer une vraie `Pending` relève de `booking-payment.smoke.spec.ts`.
+  await expect(page.getByTestId("payment-create-cta")).toBeVisible({
+    timeout: 20_000,
+  });
   await expect(page).toHaveURL(/hotelId=/);
   await expect(page).toHaveURL(/checkInDate=/);
+  // ⚠️ AC-10 à la frontière des deux étapes : **arriver** sur le paiement ne crée rien. Ce smoke
+  // ne réserve aucune chambre — s'il en gelait une, il entrerait en concurrence d'inventaire avec
+  // `booking-payment.smoke.spec.ts` et les échecs seraient attribués au mauvais scénario.
+  await expect(page.getByTestId("payment-reservation-panel")).toHaveCount(0);
+  await expect(page.getByTestId("payment-no-charge-notice")).toBeVisible();
+  expect(creations).toHaveLength(0);
 
   // AC-6/NFR-8 : le cookie de session est HttpOnly — invisible à JavaScript — et aucun jeton
   // ni mot de passe n'est stocké côté navigateur.

@@ -268,6 +268,109 @@
     },
     "sessionErrorTitle": "We could not check your sign-in status",
     "sessionErrorBody": "We do not know whether you are signed in. Please try again before continuing — creating a guest account now could duplicate your own.",
-    "summaryUnavailable": "Booking summary unavailable right now."
+    "summaryUnavailable": "Booking summary unavailable right now.",
+    "createTitle": "Book your room",
+    "createIntro": "We book your room and hold it while you complete payment.",
+    "createCta": "Book this room",
+    "creating": "Booking…",
+    "noChargeYet": "No amount is charged at this step.",
+    "reservedTitle": "Your room is booked",
+    "reservedIntro": "Your booking is recorded and awaiting payment. It will be confirmed once payment is completed.",
+    "reservationCodeLabel": "Booking code",
+    "reservationTotalLabel": "Total to pay",
+    "amountUnreliable": "Amount cannot be shown ({currency})",
+    "amountUnreliableHelp": "We cannot render the amount reliably in this currency. We would rather show nothing than a wrong total.",
+    "holdUntil": "Your room is held until {time}.",
+    "holdExpiredTitle": "Your room is no longer held",
+    "holdExpiredBody": "The booking window has elapsed and the room was released. You can start a new booking.",
+    "restartCta": "Book again",
+    "reservationCancelledTitle": "This booking was cancelled",
+    "reservationCancelledBody": "It is no longer awaiting payment and the room was released. No amount has been charged.",
+    "reservationCancelledNotice": "You can start a new booking for this stay.",
+    "reservationSettledTitle": "This booking is no longer awaiting payment",
+    "reservationSettledBody": "Its status changed since your last visit: there is nothing to pay on this screen.",
+    "reservationSettledNotice": "No action is required here.",
+    "reservationStatusUnknownTitle": "Booking status undetermined",
+    "reservationStatusUnknownBody": "We could not establish the exact state of this booking. As a precaution, payment is not offered.",
+    "reservationStatusUnknownNotice": "Load it again to get its real state.",
+    "reservationMismatchTitle": "This booking is for another stay",
+    "reservationMismatchBody": "The booking carried by this link does not match the room, the dates or the number of guests shown here. Open it as it stands, or start again from the stay shown.",
+    "viewExistingReservation": "Open the existing booking",
+    "mustIdentifyTitle": "Identify yourself to book",
+    "mustIdentifyBody": "Your session is no longer active. Go back to the previous step to continue, without losing your stay.",
+    "goToIdentify": "Back to identification",
+    "reservationLoadErrorTitle": "Booking not found",
+    "reservationLoadErrorBody": "We could not retrieve this booking. You can start a new one for this stay.",
+    "reservationLoadSessionTitle": "Your session is no longer active",
+    "reservationLoadSessionBody": "We cannot read this booking back without a valid session. Identify yourself again: your booking and your stay are preserved.",
+    "reservationLoadOutageTitle": "Booking temporarily unreadable",
+    "reservationLoadOutageBody": "We could not reach our booking service. Your booking is not lost: try again rather than creating a second one.",
+    "confirmNewPrice": "Book at the new rate",
+    "failurePriceChangedBody": "The rate for this room changed: the total is now {total}. No amount has been charged.",
+    "summaryOutdated": "The total in the summary is out of date: only the new total shown above will apply.",
+    "announceReserved": "Your room is booked and held while you pay.",
+    "announceHoldExpired": "Your room is no longer held.",
+    "announceReservationCancelled": "This booking was cancelled.",
+    "announceReservationSettled": "This booking is no longer awaiting payment.",
+    "announceReservationStatusUnknown": "The status of this booking is undetermined.",
+    "announceReservationMismatch": "The booking on this link is for another stay.",
+    "preferencesTitle": "Your preferences",
+    "preferencesIntro": "Optional — this information travels with your booking request.",
+    "specialRequestsLabel": "Special requests",
+    "specialRequestsPlaceholder": "Late arrival, quiet room, high floor…",
+    "specialRequestsHelp": "The hotel reads these at the front desk. This is not a guarantee: nothing is reserved on this basis.",
+    "specialRequestsCounter": "{count} / {max} characters",
+    "specialRequestsTooLong": "Special requests cannot exceed {max} characters.",
+    "communicationLocaleLabel": "Language for my communications",
+    "communicationLocaleHelp": "Your choice travels with your booking. It does not yet drive the language of the hotel’s emails and documents: those currently go out in the property’s usual language.",
+    "preferencesLockedTitle": "Your preferences",
+    "preferencesLockedNotice": "This information travels with your booking and can no longer be changed here. To update it, contact the hotel.",
+    "specialRequestsAttachedLabel": "Saved special requests",
+    "specialRequestsNone": "No special requests.",
+    "communicationLocaleAttachedLabel": "Communication language",
+    "preferencesDivergedNotice": "Your reservation already existed: the saved requests above are what counts, not what you just typed.",
+    "failure": {
+      "room-unavailable": {
+        "title": "This room has just been booked",
+        "body": "It is no longer available for these dates. Other rooms in the hotel may suit you."
+      },
+      "over-capacity": {
+        "title": "Too many guests for this room",
+        "body": "This room does not accommodate your number of guests. Choose a larger room."
+      },
+      "invalid-dates": {
+        "title": "Invalid dates",
+        "body": "The dates of your stay cannot be booked. Change them to continue."
+      },
+      "room-not-found": {
+        "title": "Room not found",
+        "body": "This room no longer exists in this hotel. Here are the other available rooms."
+      },
+      "session-invalid": {
+        "title": "Session expired",
+        "body": "Your session is no longer valid. Identify yourself again: your stay is preserved."
+      },
+      "price-changed": {
+        "title": "The rate has changed",
+        "body": "The rate for this room changed since the summary was displayed. No amount has been charged."
+      },
+      "rate-limited": {
+        "title": "Too many attempts",
+        "body": "You made several attempts in a row. New attempts are temporarily blocked. No booking was created: you can pick your stay back up from the summary."
+      },
+      "rejected": {
+        "title": "Your request was not accepted",
+        "body": "The property did not accept this booking. No amount has been charged: check the details of your stay."
+      },
+      "unavailable": {
+        "title": "Service temporarily unavailable",
+        "body": "We could not reach our booking service. No booking was created."
+      },
+      "unknown": {
+        "title": "The booking did not go through",
+        "body": "An unexpected error occurred. No booking was created."
+      }
+    },
+    "communicationLocaleAttachedNotice": "This preference is kept, but the hotel currently writes in its usual language."
   }
 }

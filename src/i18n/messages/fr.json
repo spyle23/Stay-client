@@ -268,6 +268,109 @@
     },
     "sessionErrorTitle": "Impossible de vérifier votre connexion",
     "sessionErrorBody": "Nous ne savons pas si vous êtes connecté. Réessayez avant de poursuivre — créer un compte invité maintenant pourrait faire doublon avec le vôtre.",
-    "summaryUnavailable": "Récapitulatif indisponible pour le moment."
+    "summaryUnavailable": "Récapitulatif indisponible pour le moment.",
+    "createTitle": "Réserver votre chambre",
+    "createIntro": "Nous réservons votre chambre et la tenons le temps de finaliser le paiement.",
+    "createCta": "Réserver cette chambre",
+    "creating": "Réservation en cours…",
+    "noChargeYet": "Aucun montant n’est débité à cette étape.",
+    "reservedTitle": "Votre chambre est réservée",
+    "reservedIntro": "Votre réservation est enregistrée en attente de paiement. Elle sera confirmée une fois le paiement finalisé.",
+    "reservationCodeLabel": "Code de réservation",
+    "reservationTotalLabel": "Total à régler",
+    "amountUnreliable": "Montant non affichable ({currency})",
+    "amountUnreliableHelp": "Cette devise ne nous permet pas de restituer le montant avec certitude. Nous préférons ne rien afficher plutôt qu’un total faux.",
+    "holdUntil": "Votre chambre est tenue jusqu’à {time}.",
+    "holdExpiredTitle": "Votre chambre n’est plus tenue",
+    "holdExpiredBody": "Le délai de réservation est écoulé et la chambre a été remise à la vente. Vous pouvez relancer une réservation.",
+    "restartCta": "Réserver à nouveau",
+    "reservationCancelledTitle": "Cette réservation a été annulée",
+    "reservationCancelledBody": "Elle n’est plus en attente de paiement et la chambre a été remise à la vente. Aucun montant n’a été débité.",
+    "reservationCancelledNotice": "Vous pouvez relancer une réservation pour ce séjour.",
+    "reservationSettledTitle": "Cette réservation n’attend plus de paiement",
+    "reservationSettledBody": "Son statut a changé depuis votre dernière visite : il n’y a rien à régler sur cet écran.",
+    "reservationSettledNotice": "Aucune action n’est requise ici.",
+    "reservationStatusUnknownTitle": "Statut de la réservation indéterminé",
+    "reservationStatusUnknownBody": "Nous n’avons pas pu établir l’état exact de cette réservation. Par précaution, le paiement n’est pas proposé.",
+    "reservationStatusUnknownNotice": "Relancez la lecture pour obtenir son état réel.",
+    "reservationMismatchTitle": "Cette réservation concerne un autre séjour",
+    "reservationMismatchBody": "La réservation portée par ce lien ne correspond pas à la chambre, aux dates ou au nombre de voyageurs affichés ici. Ouvrez-la telle qu’elle est, ou repartez sur le séjour affiché.",
+    "viewExistingReservation": "Ouvrir la réservation existante",
+    "mustIdentifyTitle": "Identifiez-vous pour réserver",
+    "mustIdentifyBody": "Votre session n’est plus active. Reprenez à l’étape précédente pour poursuivre, sans perdre votre séjour.",
+    "goToIdentify": "Revenir à l’identification",
+    "reservationLoadErrorTitle": "Réservation introuvable",
+    "reservationLoadErrorBody": "Nous n’avons pas pu retrouver cette réservation. Vous pouvez en relancer une pour ce séjour.",
+    "reservationLoadSessionTitle": "Votre session n’est plus active",
+    "reservationLoadSessionBody": "Nous ne pouvons pas relire cette réservation sans session valide. Identifiez-vous à nouveau : votre réservation et votre séjour sont conservés.",
+    "reservationLoadOutageTitle": "Réservation momentanément illisible",
+    "reservationLoadOutageBody": "Nous n’avons pas pu joindre notre service de réservation. Votre réservation n’est pas perdue : réessayez plutôt que d’en créer une seconde.",
+    "confirmNewPrice": "Réserver au nouveau tarif",
+    "failurePriceChangedBody": "Le tarif de cette chambre a changé : le total est désormais de {total}. Aucun montant n’a été débité.",
+    "summaryOutdated": "Le total du récapitulatif n’est plus à jour : seul le nouveau total indiqué ci-dessus sera opposé au paiement.",
+    "announceReserved": "Votre chambre est réservée et tenue le temps du paiement.",
+    "announceHoldExpired": "Votre chambre n’est plus tenue.",
+    "announceReservationCancelled": "Cette réservation a été annulée.",
+    "announceReservationSettled": "Cette réservation n’attend plus de paiement.",
+    "announceReservationStatusUnknown": "Le statut de cette réservation est indéterminé.",
+    "announceReservationMismatch": "La réservation de ce lien concerne un autre séjour.",
+    "preferencesTitle": "Vos préférences",
+    "preferencesIntro": "Facultatif — ces informations accompagnent votre demande de réservation.",
+    "specialRequestsLabel": "Demandes spéciales",
+    "specialRequestsPlaceholder": "Arrivée tardive, chambre calme, étage élevé…",
+    "specialRequestsHelp": "L’hôtel en prend connaissance à la réception. Ce n’est pas une garantie : rien n’est réservé sur cette base.",
+    "specialRequestsCounter": "{count} / {max} caractères",
+    "specialRequestsTooLong": "Les demandes spéciales ne peuvent pas dépasser {max} caractères.",
+    "communicationLocaleLabel": "Langue de mes communications",
+    "communicationLocaleHelp": "Votre choix accompagne votre réservation. Il ne pilote pas encore la langue des e-mails et documents de l’hôtel : ceux-ci partent aujourd’hui dans la langue habituelle de l’établissement.",
+    "preferencesLockedTitle": "Vos préférences",
+    "preferencesLockedNotice": "Ces informations accompagnent votre réservation et ne peuvent plus être modifiées ici. Pour les changer, contactez l’hôtel.",
+    "specialRequestsAttachedLabel": "Demandes spéciales enregistrées",
+    "specialRequestsNone": "Aucune demande spéciale.",
+    "communicationLocaleAttachedLabel": "Langue de communication",
+    "preferencesDivergedNotice": "Votre réservation existait déjà : ce sont les demandes enregistrées ci-dessus qui font foi, pas votre saisie en cours.",
+    "failure": {
+      "room-unavailable": {
+        "title": "Cette chambre vient d’être réservée",
+        "body": "Elle n’est plus disponible pour ces dates. D’autres chambres de l’hôtel peuvent convenir."
+      },
+      "over-capacity": {
+        "title": "Trop de voyageurs pour cette chambre",
+        "body": "Cette chambre n’accueille pas votre nombre de voyageurs. Choisissez une chambre plus grande."
+      },
+      "invalid-dates": {
+        "title": "Dates non valides",
+        "body": "Les dates de votre séjour ne peuvent pas être réservées. Modifiez-les pour continuer."
+      },
+      "room-not-found": {
+        "title": "Chambre introuvable",
+        "body": "Cette chambre n’existe plus dans cet hôtel. Voici les autres chambres disponibles."
+      },
+      "session-invalid": {
+        "title": "Session expirée",
+        "body": "Votre session n’est plus valide. Identifiez-vous à nouveau : votre séjour est conservé."
+      },
+      "price-changed": {
+        "title": "Le tarif a changé",
+        "body": "Le tarif de cette chambre a changé depuis l’affichage du récapitulatif. Aucun montant n’a été débité."
+      },
+      "rate-limited": {
+        "title": "Trop de tentatives",
+        "body": "Vous avez fait plusieurs tentatives coup sur coup. De nouvelles tentatives sont temporairement bloquées. Aucune réservation n’a été créée : vous pouvez reprendre depuis le récapitulatif."
+      },
+      "rejected": {
+        "title": "Votre demande n’a pas été acceptée",
+        "body": "L’établissement n’a pas accepté cette réservation. Aucun montant n’a été débité : vérifiez les informations de votre séjour."
+      },
+      "unavailable": {
+        "title": "Service momentanément indisponible",
+        "body": "Nous n’avons pas pu joindre notre service de réservation. Aucune réservation n’a été créée."
+      },
+      "unknown": {
+        "title": "La réservation n’a pas abouti",
+        "body": "Une erreur inattendue est survenue. Aucune réservation n’a été créée."
+      }
+    },
+    "communicationLocaleAttachedNotice": "Cette préférence est conservée, mais l’hôtel écrit aujourd’hui dans sa langue habituelle."
   }
 }

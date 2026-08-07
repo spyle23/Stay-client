@@ -6,7 +6,7 @@ import { BookingSteps } from "@/components/molecules/booking-steps";
 import { BookingIdentify } from "@/components/organisms/booking-identify";
 import { buttonVariants } from "@/components/ui/button";
 import { cn } from "@/lib/utils";
-import { parseBookingParams } from "@/lib/validations/booking";
+import { parseBookingParams, parseGuid } from "@/lib/validations/booking";
 import { MAX_STAY_NIGHTS } from "@/lib/validations/search";
 
 export async function generateMetadata(): Promise<Metadata> {
@@ -37,12 +37,21 @@ export default async function BookingIdentifyPage({
   const t = await getTranslations("booking");
   const parsed = parseBookingParams(sp);
 
+  // Une réservation déjà créée peut ramener le voyageur ici (session expirée en plein tunnel,
+  // story 2.4). On la valide en **GUID** comme le fait `payment/page.tsx` — une valeur libre
+  // repartirait telle quelle dans l'URL de retour — et on la relaie pour que la reprise relise
+  // au lieu de recréer.
+  const rawReservationId = Array.isArray(sp.reservationId)
+    ? sp.reservationId[0]
+    : sp.reservationId;
+  const reservationId = parseGuid(rawReservationId);
+
   return (
     <main className="mx-auto flex w-full max-w-6xl flex-1 flex-col gap-6 px-4 py-6">
       <BookingSteps current="identify" />
 
       {parsed.ok ? (
-        <BookingIdentify params={parsed.value} />
+        <BookingIdentify params={parsed.value} reservationId={reservationId} />
       ) : (
         <div
           role="alert"

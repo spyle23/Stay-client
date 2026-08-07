@@ -3,10 +3,11 @@ import Link from "next/link";
 import { getTranslations } from "next-intl/server";
 
 import { BookingSteps } from "@/components/molecules/booking-steps";
+import { BookingPayment } from "@/components/organisms/booking-payment";
 import { buttonVariants } from "@/components/ui/button";
 import { cn } from "@/lib/utils";
-import { parseBookingParams } from "@/lib/validations/booking";
-import { buildIdentifyUrl } from "@/services/booking.service";
+import { parseBookingParams, parseGuid } from "@/lib/validations/booking";
+import { MAX_STAY_NIGHTS } from "@/lib/validations/search";
 
 export async function generateMetadata(): Promise<Metadata> {
   const t = await getTranslations("booking");
@@ -17,17 +18,23 @@ export async function generateMetadata(): Promise<Metadata> {
 }
 
 /**
- * Étape 3 du tunnel — **création de la réservation `Pending` et paiement**. Le contenu réel est
- * le périmètre des stories **2.4** (création atomique + Hold de checkout) et **3.1** (Stripe
- * Payment Element, 3-D Secure, capture manuelle).
+ * Création de la Réservation `Pending` — **étape 3 du tunnel** (story 2.4, FR-9).
  *
- * Cette page existe dès la story 2.3 pour une raison précise : le CTA de l'étape d'identification
- * ne doit pas être un **lien mort** (défaut relevé en revue de la story 1.10, repris en 2.2 pour
- * `/booking/identify`). Elle se borne à accuser réception du contexte du séjour et à offrir un
- * retour non destructif — aucune logique, aucun appel réseau.
+ * Coquille **SSR** (Server Component) : elle valide les query-params côté serveur et ne monte
+ * l'île cliente que si le contexte de séjour est exploitable — une URL invalide rend un état
+ * explicite **sans aucun appel réseau**, comme `recap/` et `identify/`.
  *
- * Volontairement **non gardée** : la garde de session arrive avec la création de réservation
- * (2.4), qui est la première écriture réellement authentifiée du tunnel.
+ * `reservationId` (posé après création) est validé **GUID** ici : une valeur libre partirait
+ * telle quelle dans un chemin du BFF. Une valeur non conforme est simplement ignorée — l'écran
+ * repart alors sur la création, plutôt que d'afficher une erreur pour une URL bricolée.
+ *
+ * Route **publique** au sens du routage : la garde vit côté BFF (la création exige une session).
+ * Poser une garde de route ici forcerait l'identification avant même d'avoir vu l'écran, ce que
+ * le tunnel s'interdit (UX-DR-9.6) — c'est pourquoi le matcher de `src/proxy.ts` reste limité à
+ * `/account/:path*`.
+ *
+ * `BookingSteps` conserve `current="identify"` : le design fusionne « Vos infos & paiement » en
+ * une seule étape ; introduire une 4ᵉ puce contredirait le fil affiché depuis la story 2.2.
  */
 export default async function BookingPaymentPage({
   searchParams,
@@ -37,29 +44,46 @@ export default async function BookingPaymentPage({
   const sp = await searchParams;
   const t = await getTranslations("booking");
   const parsed = parseBookingParams(sp);
+  const rawReservationId = Array.isArray(sp.reservationId)
+    ? sp.reservationId[0]
+    : sp.reservationId;
+  const reservationId = parseGuid(rawReservationId);
 
   return (
     <main className="mx-auto flex w-full max-w-6xl flex-1 flex-col gap-6 px-4 py-6">
       <BookingSteps current="identify" />
-      <div
-        data-testid="booking-payment-placeholder"
-        className="flex flex-col items-center gap-3 rounded-xl bg-card p-8 text-center ring-1 ring-border"
-      >
-        <p className="text-h3 text-foreground">{t("paymentTitle")}</p>
-        <p className="max-w-md text-body text-muted-foreground">
-          {t("paymentPlaceholder")}
-        </p>
-        <Link
-          href={parsed.ok ? buildIdentifyUrl(parsed.value) : "/"}
-          className={cn(
-            buttonVariants({ variant: "outline" }),
-            "min-h-(--tap-min)",
-          )}
-          data-testid="booking-payment-back"
+
+      {parsed.ok ? (
+        <BookingPayment params={parsed.value} reservationId={reservationId} />
+      ) : (
+        <div
+          role="alert"
+          data-testid="booking-invalid"
+          className="flex flex-col items-center gap-3 rounded-xl bg-card p-8 text-center ring-1 ring-border"
         >
-          {parsed.ok ? t("backToIdentify") : t("invalidCta")}
-        </Link>
-      </div>
+          <p className="text-h3 text-foreground">{t("invalidTitle")}</p>
+          <p className="max-w-md text-body text-muted-foreground">
+            {t("invalidBody")}
+          </p>
+          <ul className="flex flex-col gap-0.5 text-small text-muted-foreground">
+            {parsed.errors.map((code) => (
+              <li key={code}>
+                {t(`errors.${code}`, { max: MAX_STAY_NIGHTS })}
+              </li>
+            ))}
+          </ul>
+          <Link
+            href="/"
+            className={cn(
+              buttonVariants({ variant: "outline" }),
+              "min-h-(--tap-min)",
+            )}
+            data-testid="booking-invalid-cta"
+          >
+            {t("invalidCta")}
+          </Link>
+        </div>
+      )}
     </main>
   );
 }

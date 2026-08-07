@@ -94,17 +94,20 @@ export function BookingSummary({
       </button>
 
       {/* Pendant un recalcul, le détail affiché est celui du séjour PRÉCÉDENT (`keepPreviousData`) :
-          il est marqué périmé (`aria-busy` + atténuation) plutôt que présenté comme courant —
-          sans quoi la ventilation et les dates contrediraient silencieusement l'éditeur de séjour. */}
+          il est marqué périmé plutôt que présenté comme courant — sans quoi la ventilation et les
+          dates contrediraient silencieusement l'éditeur de séjour.
+
+          ⚠️ L'état périmé est porté par `aria-busy`, le libellé « recalcul » de l'en-tête et le
+          `loading` du total — **jamais par une atténuation d'opacité**. Une `opacity-60` sur ce
+          bloc fait tomber `text-muted-foreground` à **2.46:1** sur fond clair (AA exige 4.5:1) :
+          `axe` l'a relevé sur 11 nœuds (`aside`, `dt`, `span`) dès que l'état a enfin été audité,
+          en thème clair **comme** sombre. Atténuer du texte pour signifier « périmé » est
+          précisément l'anti-patron qui casse le contraste — revue de code 2.4. */}
       <div
         id={panelId}
         data-testid="booking-summary-panel"
         aria-busy={recalculating}
-        className={cn(
-          "flex-col",
-          expanded ? "flex" : "hidden lg:flex",
-          recalculating && "opacity-60",
-        )}
+        className={cn("flex-col", expanded ? "flex" : "hidden lg:flex")}
       >
         <header className="flex gap-3 border-b border-border p-4">
           {/* Vignette décorative (`alt=""`) : toute l'information est portée par le texte à côté.

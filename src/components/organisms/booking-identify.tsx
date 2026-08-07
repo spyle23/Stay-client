@@ -49,7 +49,23 @@ import { buildHotelPageUrl } from "@/services/catalog.service";
  * réellement indisponible neutralisent le passage au paiement — s'identifier pour une réservation
  * vouée à l'échec serait un cul-de-sac.
  */
-export function BookingIdentify({ params }: { params: ParsedBookingParams }) {
+export function BookingIdentify({
+  params,
+  reservationId = null,
+}: {
+  params: ParsedBookingParams;
+  /**
+   * Réservation `Pending` déjà créée, quand le voyageur revient s'identifier depuis l'étape de
+   * paiement (session expirée en cours de tunnel — story 2.4, AC-9).
+   *
+   * Le transporter est ce qui empêche la reprise de **recréer** une réservation : sans lui, le
+   * retour vers `/booking/payment` perdrait l'identifiant, la `Pending` déjà posée deviendrait
+   * inadressable depuis le navigateur (elle gèle pourtant une vraie chambre), et l'écran
+   * reproposerait une création. L'idempotence du BFF est clée sur le `userId` : elle ne rattrape
+   * rien si la ré-identification produit un **autre** compte.
+   */
+  reservationId?: string | null;
+}) {
   const t = useTranslations("booking");
   const tAuth = useTranslations("auth");
   const router = useRouter();
@@ -104,8 +120,8 @@ export function BookingIdentify({ params }: { params: ParsedBookingParams }) {
   const blocked = overCapacity || unavailable || quoteUnknown;
 
   const goToPayment = useCallback(() => {
-    router.push(buildPaymentUrl(params));
-  }, [router, params]);
+    router.push(buildPaymentUrl(params, reservationId ?? undefined));
+  }, [router, params, reservationId]);
 
   // Une navigation peut partir pendant l'appel (lien « Retour au récapitulatif », bouton natif du
   // navigateur) : après démontage, ni `router.push` ni `setState` ne doivent plus s'exécuter —

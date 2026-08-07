@@ -8,7 +8,25 @@ const buttonVariants = cva(
   {
     variants: {
       variant: {
-        default: "bg-primary text-primary-foreground hover:bg-primary/80",
+        // ⚠️ Le survol s'écarte de la couleur du **texte du bouton**, il ne réduit PAS l'opacité.
+        //
+        // 1ʳᵉ correction : `hover:bg-primary/80` laissait le fond de la page transparaître, et le
+        //    blanc tombait à 4,20:1 — sous le seuil AA de 4,5, alors que l'état de repos tient
+        //    4,99:1. Le défaut avait échappé aux audits parce qu'`axe` ne mesure que l'état rendu.
+        // 2ᵉ correction (revue 2ᵉ passe, F10) : mélanger vers `--foreground` supposait que le texte
+        //    du bouton soit de polarité opposée au premier plan de la page. Vrai pour `:root` et
+        //    `.dark` — **faux** sous `[data-hotel-theme]`, qui surcharge `--primary` et
+        //    `--primary-foreground` mais **pas** `--foreground` (`globals.css`). Avec un accent
+        //    hôtel clair à texte foncé, le survol *rapprochait* le fond du texte : 5,91 → 4,82.
+        //
+        // Conclusion : **toute** variation de luminosité du fond peut réduire le contraste, le sens
+        // dépendant d'une couleur de texte que le CSS ne peut pas interroger (`color-contrast()`
+        // reste trop peu supporté). L'affordance de survol ne touche donc plus au couple
+        // fond/texte : elle passe par l'**élévation**, qui est contraste-neutre par construction et
+        // tient sous n'importe quelle paire injectée par un hôtelier. Même registre que le
+        // `active:translate-y-px` déjà porté par la base.
+        default:
+          "bg-primary text-primary-foreground shadow-soft hover:shadow-elevated",
         outline:
           "border-border bg-background hover:bg-muted hover:text-foreground aria-expanded:bg-muted aria-expanded:text-foreground dark:border-input dark:bg-input/30 dark:hover:bg-input/50",
         secondary:
