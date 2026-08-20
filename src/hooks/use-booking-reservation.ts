@@ -62,12 +62,19 @@ export function useCreateReservation() {
       params,
       expected,
       preferences,
+      services,
     }: {
       params: ParsedBookingParams;
       expected: ExpectedPrice;
       /** Demandes spéciales + langue de communication (story 2.5) — facultatives. */
       preferences?: BookingPreferences;
-    }) => createReservation(params, expected, preferences),
+      /** Panier d'upsell (story 2.6) — facultatif, omis du corps quand il est vide. */
+      services?: readonly {
+        serviceId: string;
+        quantity: number;
+        serviceDate: string;
+      }[];
+    }) => createReservation(params, expected, preferences, services),
     // Aucun rejeu automatique : l'écriture n'est pas idempotente côté PMS et le BFF porte déjà
     // sa propre idempotence. Un retry du client ne ferait qu'ajouter de la contention sur le
     // verrou de séjour — le voyageur, lui, garde la main.

@@ -21,6 +21,7 @@ import {
 export const BOOKING_ENDPOINTS = {
   quote: "/booking/quote",
   reservations: "/booking/reservations",
+  services: "/booking/services",
 } as const;
 
 /** État de la taxe — `included_undetailed` tant que D7 n'alimente pas la taxe côté PMS. */
@@ -161,7 +162,20 @@ export interface BookingReservationResult {
   guests: number;
   currency: string;
   pricePerNight: number;
+  /**
+   * Montant qui **engage** : chambre + services (le `grandTotal` du PMS, story 2.6 / D6).
+   * C'est lui — et non `roomTotal` — qui est opposé à `expectedTotal` et qui sera débité.
+   */
   total: number;
+  /** Sous-total **chambre seule**. Reste le `totalPrice` du PMS, dont le sens n'a pas changé. */
+  roomTotal: number;
+  /** Sous-total des services non annulés. `0` sans upsell. */
+  servicesTotal: number;
+  /**
+   * Services **réellement attachés**, relus du PMS — jamais l'écho du panier envoyé. Une ligne
+   * `Cancelled` est un service retiré faute de disponibilité : elle doit rester visible (AC-6).
+   */
+  services: ReservationServiceResult[];
   /** Échéance du Hold de checkout (ISO 8601 UTC), ou `null` si le hold a expiré. */
   holdExpiresAt: string | null;
   /**
@@ -319,6 +333,11 @@ export function createReservation(
   params: ParsedBookingParams,
   expected: ExpectedPrice,
   preferences?: BookingPreferences,
+  services?: readonly {
+    serviceId: string;
+    quantity: number;
+    serviceDate: string;
+  }[],
 ): Promise<BookingReservationResult> {
   // Normalisée comme le fera le BFF : ce qui part est exactement ce qui sera stocké, donc ce qui
   // sera relu. Sans cela, la comparaison de divergence portait sur deux formes différentes (F5).
@@ -342,7 +361,108 @@ export function createReservation(
     ...(preferences?.localeTouched
       ? { communicationLocale: preferences.communicationLocale }
       : {}),
+    // Panier d'upsell (story 2.6) : cle OMISE quand il est vide, comme `specialRequests`. Le BFF
+    // distingue Â« pas de panier Â» de Â« panier vide Â», et n'omet la cle vers le PMS que dans le
+    // premier cas.
+    ...(services !== undefined && services.length > 0 ? { services } : {}),
   });
+}
+
+/**
+ * Un service proposé à l'ajout au moment de la réservation (story 2.6, FR-11).
+ * Miroir de `UpsellServiceDto` côté BFF. Montants en **unités mineures**, devise de l'Hôtel.
+ */
+export interface UpsellServiceResult {
+  serviceId: string;
+  name: string;
+  description: string | null;
+  unitPrice: number;
+  currency: string;
+  /** Unité de facturation en texte libre (« par nuit »…) — affichée telle quelle, jamais calculée. */
+  unit: string | null;
+}
+
+/** Catalogue d'upsell d'un séjour. `degraded` = le BFF n'a pas su le composer (panne PMS). */
+export interface UpsellCatalogResult {
+  services: UpsellServiceResult[];
+  degraded: boolean;
+}
+
+/** Une ligne de service attachée à la réservation, relue du PMS. */
+export interface ReservationServiceResult {
+  lineId: string;
+  serviceId: string;
+  name: string;
+  unitPrice: number;
+  quantity: number;
+  lineTotal: number;
+  serviceDate: string;
+  status: ReservationStatus;
+}
+
+/** Sélection d'upsell du voyageur : quantité par service. Vide = aucun service. */
+export type UpsellSelection = Readonly<Record<string, number>>;
+
+/** Convention de clés React Query pour le catalogue d'upsell. */
+export const upsellKeys = {
+  all: ["booking", "upsell"] as const,
+  forStay: (params: ParsedBookingParams) =>
+    [
+      "booking",
+      "upsell",
+      params.hotelId,
+      params.roomId,
+      params.checkInDate,
+      params.checkOutDate,
+      params.guests,
+    ] as const,
+};
+
+/** Catalogue d'upsell du séjour. Gardé côté BFF : une session est requise. */
+export function fetchUpsellServices(
+  params: ParsedBookingParams,
+): Promise<UpsellCatalogResult> {
+  return api.get<UpsellCatalogResult>(
+    `${BOOKING_ENDPOINTS.services}?${toQueryString(params)}`,
+  );
+}
+
+/**
+ * Sous-total des services sélectionnés, en unités mineures.
+ *
+ * Arithmétique sur des **prix serveur** (le catalogue vient du BFF, qui les lit du PMS) : c'est la
+ * même nature de calcul que `pricePerNight × nights`, et le BFF re-tarife le panier à la création.
+ * Une sélection portant sur un service absent du catalogue est ignorée — jamais estimée.
+ */
+export function upsellSubtotal(
+  catalog: readonly UpsellServiceResult[],
+  selection: UpsellSelection,
+): number {
+  return catalog.reduce((sum, service) => {
+    const quantity = selection[service.serviceId] ?? 0;
+    return quantity > 0 ? sum + service.unitPrice * quantity : sum;
+  }, 0);
+}
+
+/**
+ * Lignes de panier telles qu'attendues par le BFF.
+ *
+ * `serviceDate` est fixée au **premier jour du séjour** : le PMS exige une date dans la fenêtre du
+ * séjour, et l'écran ne demande pas au voyageur de choisir un jour (le choix par créneau relèverait
+ * d'un service à stock daté, hors périmètre de cette story).
+ */
+export function toUpsellLines(
+  catalog: readonly UpsellServiceResult[],
+  selection: UpsellSelection,
+  serviceDate: string,
+): { serviceId: string; quantity: number; serviceDate: string }[] {
+  return catalog
+    .filter((service) => (selection[service.serviceId] ?? 0) > 0)
+    .map((service) => ({
+      serviceId: service.serviceId,
+      quantity: selection[service.serviceId] as number,
+      serviceDate,
+    }));
 }
 
 /** Relit une réservation du tunnel (reprise après rafraîchissement ou retour arrière). */

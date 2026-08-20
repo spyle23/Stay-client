@@ -9,6 +9,7 @@ const WCAG_TAGS = ["wcag2a", "wcag2aa", "wcag21a", "wcag21aa"];
 const QUOTE_ROUTE = "**/api/v1/booking/quote**";
 const SESSION_ROUTE = "**/api/v1/auth/session";
 const RESERVATIONS_ROUTE = "**/api/v1/booking/reservations**";
+const UPSELL_ROUTE = "**/api/v1/booking/services**";
 
 /** Date-only UTC décalée de `days` jours (les dates passées sont rejetées à la validation). */
 function isoDatePlus(days: number): string {
@@ -79,6 +80,10 @@ function reservation(overrides: Record<string, unknown> = {}) {
     currency: "EUR",
     pricePerNight: 8400,
     total: 16800,
+    // Story 2.6 — présents dans le contrat réel du BFF, comme les champs de la story 2.5.
+    roomTotal: 16800,
+    servicesTotal: 0,
+    services: [],
     holdExpiresAt: new Date(Date.now() + 600_000).toISOString(),
     // Story 2.5 — toujours présents dans le contrat réel du BFF (jamais `undefined`) : une fixture
     // qui les omettrait ferait passer des tests sur un corps que le BFF n'émet pas.
@@ -120,6 +125,8 @@ interface BffOptions {
   /** Réponses successives aux créations — c'est ce qui permet d'enchaîner refus puis acceptation. */
   createSequence?: CreateOutcome[];
   createDelayMs?: number;
+  /** Catalogue d'upsell servi par le BFF (story 2.6). Vide par défaut. */
+  upsellBody?: Record<string, unknown>;
   getBody?: Record<string, unknown>;
   getStatus?: number;
 }
@@ -145,6 +152,9 @@ async function fulfillCreate(route: Route, outcome: CreateOutcome) {
 async function mockBff(page: Page, options: BffOptions = {}): Promise<void> {
   await page.route(QUOTE_ROUTE, (route) =>
     json(route, options.quoteBody ?? quote(), options.quoteStatus ?? 200),
+  );
+  await page.route(UPSELL_ROUTE, (route) =>
+    json(route, options.upsellBody ?? { services: [], degraded: false }),
   );
   await page.route(SESSION_ROUTE, (route) =>
     json(

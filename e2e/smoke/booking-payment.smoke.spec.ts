@@ -456,3 +456,100 @@ test("Demandes spéciales & langue portées jusqu’au vrai PMS et relues", asyn
     [],
   );
 });
+
+/**
+ * Upsell de services contre le vrai stack (story 2.6, FR-11 / dépendance D6).
+ *
+ * Ce que seul ce niveau prouve :
+ * - que le catalogue servi par `GET /booking/services` vient réellement du PMS, avec le **JWT
+ *   `Customer` en custody** — l'e2e isolé mocke le BFF et ne peut pas vérifier l'autorisation ;
+ * - que le corps de création portant `services[]` est **accepté** par le PMS (dates de service
+ *   ancrées UTC : une date-only y produit un 500) ;
+ * - que le **grand total** persisté par le PMS est bien celui affiché avant la création — la
+ *   garantie « le total affiché est le total débité » avec de vrais montants et une vraie devise.
+ *
+ * ⚠️ **Tolérant à l'absence de service.** Le seed de dev ne garantit aucun `HotelService` actif et
+ * `IsExternallyBookable` : sans lui, la section d'upsell ne se rend pas — c'est le comportement
+ * correct, pas un échec. Le test valide alors le chemin « sans service » (le corps de création ne
+ * doit porter AUCUNE clé `services`) et signale l'absence de données. Pour couvrir le parcours
+ * complet, créer un service via le back-office Manager (:3000) avant de rejouer.
+ */
+test("Upsell de services contre le vrai PMS : catalogue, panier accepté, total combiné", async ({
+  page,
+}) => {
+  const failures = watchForFailures(page);
+  const createBodies: Record<string, unknown>[] = [];
+  page.on("request", (req) => {
+    if (
+      req.method() === "POST" &&
+      req.url().includes("/api/v1/booking/reservations")
+    ) {
+      createBodies.push((req.postDataJSON() ?? {}) as Record<string, unknown>);
+    }
+  });
+
+  // La réponse du catalogue est attendue AVANT toute décision : `count()` ne patiente pas, et
+  // l'appel part au montage de l'étape. Sans cette attente, le test empruntait systématiquement
+  // le chemin « aucun service » — il passait, mais ne prouvait rien de l'upsell.
+  const catalogResponse = page.waitForResponse(
+    (res) =>
+      res.url().includes("/api/v1/booking/services") && res.status() === 200,
+    { timeout: 30_000 },
+  );
+
+  await goToPayment(
+    page,
+    `upsell-${Date.now()}@example.com`,
+    uniqueStayOffset(4),
+  );
+
+  await catalogResponse;
+
+  const upsell = page.getByTestId("service-upsell");
+  const hasServices = (await upsell.count()) > 0;
+
+  if (hasServices) {
+    const toggle = upsell.getByRole("checkbox").first();
+
+    // Opt-in strict, avec de vraies données : rien n'est coché à l'arrivée (UX-DR-9.7).
+    await expect(toggle).not.toBeChecked();
+    await toggle.check();
+    await expect(page.getByTestId("upsell-subtotal")).not.toContainText(
+      "Aucun service",
+    );
+  }
+
+  await page.getByTestId("payment-create-cta").click();
+  await expect(page.getByTestId("payment-reservation-code")).toBeVisible({
+    timeout: 30_000,
+  });
+
+  expect(createBodies).toHaveLength(1);
+
+  if (hasServices) {
+    // Le panier a réellement traversé la frontière jusqu'au PMS.
+    expect(createBodies[0]).toHaveProperty("services");
+    await expect(page.getByTestId("payment-attached-services")).toBeVisible();
+  } else {
+    // Aucun service disponible : le corps doit être byte-pour-byte celui d'avant D6 (AC-9).
+    expect(createBodies[0]).not.toHaveProperty("services");
+    console.warn(
+      "[smoke 2.6] Aucun HotelService actif et vendable dans le seed — parcours d'upsell non couvert.",
+    );
+  }
+
+  // ⚠️ La garantie « total affiché = total débité » se vérifie contre le total **soumis**
+  // (`expectedTotal`, chambre + services), et NON contre `booking-total`, qui reste la chambre
+  // seule : le récapitulatif précède l'étape d'upsell. Comparer au total chambre faisait échouer
+  // le test dès qu'un service était ajouté — pour une divergence qui n'existait pas.
+  const submitted = createBodies[0].expectedTotal as number;
+  const persisted = await page
+    .getByTestId("payment-reservation-total")
+    .innerText();
+  const persistedMinor = Math.round(
+    Number(persisted.replace(/[^\d.,]/g, "").replace(",", ".")) * 100,
+  );
+  expect(persistedMinor).toBe(submitted);
+
+  expect(failures).toEqual([]);
+});

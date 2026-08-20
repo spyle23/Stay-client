@@ -1,12 +1,21 @@
 "use client";
 
-import { useCallback, useEffect, useId, useRef, useState } from "react";
+import {
+  useCallback,
+  useEffect,
+  useId,
+  useMemo,
+  useRef,
+  useState,
+} from "react";
 import Link from "next/link";
 import { useRouter } from "next/navigation";
 import { ArrowLeftIcon, LockIcon } from "lucide-react";
 import { useLocale, useTranslations } from "next-intl";
 
 import { BookingPreferences as BookingPreferencesForm } from "@/components/molecules/booking-preferences";
+import { ServiceUpsell } from "@/components/molecules/service-upsell";
+import { useUpsellServices } from "@/hooks/use-upsell-services";
 import { BookingSummary } from "@/components/organisms/booking-summary";
 import { Button, buttonVariants } from "@/components/ui/button";
 import { Skeleton } from "@/components/ui/skeleton";
@@ -35,11 +44,18 @@ import {
   isOverCapacity,
   priceChangeFrom,
   reservationFailureReason,
+  toUpsellLines,
+  upsellSubtotal,
   type BookingReservationResult,
   type ReservationFailureReason,
   type ReservationStatus,
+  type UpsellSelection,
+  type UpsellServiceResult,
 } from "@/services/booking.service";
 import { buildHotelPageUrl } from "@/services/catalog.service";
+
+/** Catalogue vide **stable** — évite une nouvelle référence à chaque rendu. */
+const EMPTY_UPSELL: readonly UpsellServiceResult[] = [];
 
 /** Délai maximal d'un `setTimeout` (32 bits signés) — au-delà, il se déclenche immédiatement. */
 const MAX_TIMEOUT_MS = 2_147_483_647;
@@ -175,6 +191,30 @@ export function BookingPayment({
     useState<BookingPreferencesError | null>(null);
 
   /**
+   * Panier d'upsell (story 2.6, FR-11) â **jamais prÃ©-rempli** (opt-in strict, UX-DR-9.7).
+   *
+   * LevÃ© ici, comme les prÃ©fÃ©rences : c'est ce qui le fait survivre Ã  un Ã©chec de crÃ©ation
+   * (`price-changed`, 503) sans que le voyageur ait Ã  re-sÃ©lectionner.
+   */
+  const [upsellSelection, setUpsellSelection] = useState<UpsellSelection>({});
+  const upsellQuery = useUpsellServices(params);
+  // Référence stable : `?? []` produirait un tableau neuf à chaque rendu et ferait changer les
+  // dépendances du `useCallback` de soumission à chaque frappe.
+  const upsellCatalog = useMemo(
+    () => upsellQuery.data?.services ?? EMPTY_UPSELL,
+    [upsellQuery.data],
+  );
+
+  /**
+   * Sous-total des services choisis, en unitÃ©s mineures.
+   *
+   * ArithmÃ©tique sur des **prix serveur** (le catalogue vient du BFF) â mÃªme nature de calcul que
+   * `pricePerNight Ã nights`. La vÃ©ritÃ© reste cÃ´tÃ© serveur : le BFF re-tarife le panier au
+   * catalogue Ã  la crÃ©ation et refuse en `price-changed` si le total annoncÃ© diverge.
+   */
+  const upsellTotal = upsellSubtotal(upsellCatalog, upsellSelection);
+
+  /**
    * Toute saisie **périme** l'erreur de la soumission précédente (revue 2ᵉ passe, F4).
    *
    * Sans cela, un refus à 1001 caractères survivait à la correction : le champ restait
@@ -285,9 +325,16 @@ export function BookingPayment({
    */
   const submit = useCallback(
     async (expected?: SubmittedPrice) => {
+      // Story 2.6 / AC-3 : le total soumis couvre chambre ET services. Envoyer le seul total du
+      // devis ferait refuser toute rÃ©servation avec upsell en `price-changed` â le BFF, lui,
+      // re-tarife le panier au catalogue serveur et compare au grand total.
+      // `expected` (re-confirmation d'un `price-changed`) porte DÃJÃ le grand total renvoyÃ© par le
+      // BFF : ne rien y rajouter, sous peine de compter les services deux fois.
       const price =
         expected ??
-        (quote ? { total: quote.total, currency: quote.currency } : null);
+        (quote
+          ? { total: quote.total + upsellTotal, currency: quote.currency }
+          : null);
       if (price === null) {
         return;
       }
@@ -318,6 +365,14 @@ export function BookingPayment({
           params,
           expected: price,
           preferences,
+          // La date de service est le premier jour du sÃ©jour : le PMS exige une date dans la
+          // fenÃªtre, et l'Ã©cran ne fait pas choisir de jour (ce serait le pÃ©rimÃ¨tre d'un service
+          // Ã  stock datÃ©).
+          services: toUpsellLines(
+            upsellCatalog,
+            upsellSelection,
+            params.checkInDate,
+          ),
         });
         if (!mounted.current) {
           return;
@@ -338,7 +393,17 @@ export function BookingPayment({
         }
       }
     },
-    [create, params, preferences, quote, refetchQuote, router],
+    [
+      create,
+      params,
+      preferences,
+      quote,
+      refetchQuote,
+      router,
+      upsellCatalog,
+      upsellSelection,
+      upsellTotal,
+    ],
   );
 
   /**
@@ -672,6 +737,17 @@ export function BookingPayment({
               error={preferencesError}
             />
 
+            {/* Upsell de services (story 2.6, FR-11 / D6) â facultatif. Part dans le MÃME appel
+                que la crÃ©ation : le PMS Ã©crit la chambre et ses services atomiquement. Le
+                composant se rend de lui-mÃªme invisible quand le catalogue est vide ou dÃ©gradÃ©. */}
+            <ServiceUpsell
+              services={upsellCatalog}
+              selection={upsellSelection}
+              onChange={setUpsellSelection}
+              currency={quote?.currency ?? ""}
+              disabled={pending}
+            />
+
             {/* Réassurance factuelle : à cette étape, rien n'est débité. Le dire explicitement
                 (UX-DR-9.9) — pas comme un argument, comme une information. */}
             <p
@@ -864,6 +940,16 @@ function ReservationPanel({
         />
       )}
 
+      {/* `?? []` porte ici sur une LISTE, pas sur un montant : une absence de services décrit
+          exactement « aucun service attaché ». Sans cette garde, une réponse antérieure à D6 —
+          ou un contrat qui dérive — ferait une page blanche sur `.length`. */}
+      {(reservation?.services ?? []).length > 0 ? (
+        <AttachedServices
+          services={reservation!.services}
+          currency={reservation!.currency}
+        />
+      ) : null}
+
       {view === "hold-expired" ? (
         <div
           role="alert"
@@ -956,6 +1042,89 @@ function ReservationPanel({
         {t("backToRecap")}
       </Link>
     </section>
+  );
+}
+
+/**
+ * Services **réellement attachés** à la réservation — en lecture seule (story 2.6, AC-5/AC-6).
+ *
+ * Les lignes annulées y figurent explicitement, et c'est le point : un service retiré parce qu'il
+ * n'était plus disponible doit être **dit** au voyageur, avec le total qui en tient compte
+ * (AC-6). Le taire ferait apparaître une baisse de prix sans cause visible.
+ *
+ * Aucune commande d'édition ici : la modification du panier passe par un appel dédié, refusé dès
+ * qu'un paiement est engagé. Tant que le paiement n'est pas branché (story 3.1), l'écran informe
+ * plutôt que de proposer une action qui n'aboutirait pas.
+ */
+function AttachedServices({
+  services,
+  currency,
+}: {
+  services: BookingReservationResult["services"];
+  currency: string;
+}) {
+  const t = useTranslations("booking.upsell");
+  const locale = useLocale();
+
+  const dropped = services.filter((line) => line.status === "Cancelled");
+  const kept = services.filter((line) => line.status !== "Cancelled");
+
+  return (
+    <div
+      className="flex flex-col gap-2 rounded-lg bg-muted/40 p-3"
+      data-testid="payment-attached-services"
+    >
+      <p className="text-small font-medium text-foreground">
+        {t("attachedTitle")}
+      </p>
+
+      {kept.length === 0 ? (
+        <p className="text-small text-muted-foreground">{t("attachedNone")}</p>
+      ) : (
+        <ul className="flex flex-col gap-1">
+          {kept.map((line) => (
+            <li
+              key={line.lineId}
+              className="flex justify-between gap-3 text-small tabular-nums"
+            >
+              <span className="text-muted-foreground">
+                {t("attachedLine", {
+                  name: line.name,
+                  quantity: line.quantity,
+                })}
+              </span>
+              <span className="text-foreground">
+                {formatCurrency(line.lineTotal, currency, locale)}
+              </span>
+            </li>
+          ))}
+        </ul>
+      )}
+
+      {dropped.length > 0 ? (
+        <div role="status" data-testid="payment-dropped-services">
+          <p className="text-small font-medium text-foreground">
+            {t("droppedTitle")}
+          </p>
+          <p className="text-small text-muted-foreground">
+            {t("droppedNotice")}
+          </p>
+          <ul className="mt-1 flex flex-col gap-0.5">
+            {dropped.map((line) => (
+              <li
+                key={line.lineId}
+                className="text-small text-muted-foreground"
+              >
+                {t("attachedLine", {
+                  name: line.name,
+                  quantity: line.quantity,
+                })}
+              </li>
+            ))}
+          </ul>
+        </div>
+      ) : null}
+    </div>
   );
 }
 
