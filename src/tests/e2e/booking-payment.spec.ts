@@ -10,6 +10,27 @@ const QUOTE_ROUTE = "**/api/v1/booking/quote**";
 const SESSION_ROUTE = "**/api/v1/auth/session";
 const RESERVATIONS_ROUTE = "**/api/v1/booking/reservations**";
 const UPSELL_ROUTE = "**/api/v1/booking/services**";
+/** Story 3.1 — demande de PaymentIntent, émise dès que la vue devient `payable`. */
+const INTENT_ROUTE = "**/api/v1/payment/reservations/*/intent";
+
+/**
+ * Stub de Stripe.js : juste assez pour que `loadStripe` résolve et que la sonde de payabilité
+ * réponde. Le parcours d'autorisation RÉEL est couvert par le smoke full-stack, contre le vrai
+ * Stripe — ici, on ne teste que notre propre logique d'écran.
+ */
+const STRIPE_JS_STUB = `window.Stripe = function () {
+  return {
+    elements: function () {
+      return { create: function () { return { mount: function () {}, on: function () {}, destroy: function () {} }; }, getElement: function () { return null; }, update: function () {} };
+    },
+    retrievePaymentIntent: function () {
+      return Promise.resolve({ paymentIntent: { status: 'requires_payment_method' } });
+    },
+    confirmPayment: function () {
+      return Promise.resolve({ error: { message: 'stub' } });
+    },
+  };
+};`;
 
 /** Date-only UTC décalée de `days` jours (les dates passées sont rejetées à la validation). */
 function isoDatePlus(days: number): string {
@@ -129,6 +150,9 @@ interface BffOptions {
   upsellBody?: Record<string, unknown>;
   getBody?: Record<string, unknown>;
   getStatus?: number;
+  /** Story 3.1 — réponse du BFF à la demande de PaymentIntent. */
+  intentBody?: Record<string, unknown>;
+  intentStatus?: number;
 }
 
 async function fulfillCreate(route: Route, outcome: CreateOutcome) {
@@ -150,6 +174,41 @@ async function fulfillCreate(route: Route, outcome: CreateOutcome) {
 }
 
 async function mockBff(page: Page, options: BffOptions = {}): Promise<void> {
+  // ⚠️ Stripe.js est routé vers un stub : sans cela, la suite « isolée » sortait réellement sur
+  // Internet dès qu'un scénario devenait payable (`PayableGate` appelle `loadStripe` au montage).
+  // Une suite isolée qui dépend d'un service tiers n'est plus isolée — et devient rouge le jour où
+  // le réseau l'est. Exigé par la story, absent jusqu'à la revue de code.
+  await page.route("https://js.stripe.com/**", (route) =>
+    route.fulfill({
+      status: 200,
+      contentType: "application/javascript",
+      body: STRIPE_JS_STUB,
+    }),
+  );
+
+  // Story 3.1 : la fente de paiement demande un intent dès qu'elle se monte. Sans cette route, la
+  // requête partirait vers un BFF absent et chaque test « payable » afficherait un état d'erreur.
+  await page.route(INTENT_ROUTE, (route) =>
+    // ⚠️ Pas `json()` : ce helper remplace le corps par un message générique dès 400, ce qui
+    // effacerait `errors.reason` — précisément ce que ces scénarios doivent transporter.
+    route.fulfill({
+      status: options.intentStatus ?? 200,
+      contentType: "application/json",
+      body: JSON.stringify(
+        options.intentBody ?? {
+          success: true,
+          data: {
+            clientSecret: "pi_e2e_secret_abc123",
+            publishableKey: "pk_test_e2e",
+            paymentIntentId: "pi_e2e",
+            amount: 16_800,
+            currency: "EUR",
+            captureMethod: "manual",
+          },
+        },
+      ),
+    }),
+  );
   await page.route(QUOTE_ROUTE, (route) =>
     json(route, options.quoteBody ?? quote(), options.quoteStatus ?? 200),
   );
@@ -1164,5 +1223,86 @@ test.describe("Tunnel — préférences de communication", () => {
     await expect(fallback).not.toContainText(
       /lorsque l’hôtel prend en charge cette langue/i,
     );
+  });
+});
+
+/**
+ * Story 3.1 — la fente de paiement, vue du navigateur.
+ *
+ * Ce qui se prouve ici et pas en test d'intégration : la requête réellement émise vers le BFF
+ * (méthode, URL) et le comportement de l'écran quand elle échoue — avant même que Stripe.js
+ * n'entre en jeu. Le parcours d'autorisation complet, lui, exige le vrai Stripe.js : il est couvert
+ * par le smoke full-stack (`e2e/smoke/booking-payment.smoke.spec.ts`).
+ */
+test.describe("paiement — demande d'intent (story 3.1)", () => {
+  test("une Pending au hold actif demande un intent au BFF, en POST", async ({
+    page,
+  }) => {
+    await mockBff(page);
+
+    const request = page.waitForRequest(
+      (req) =>
+        req.url().includes(`/payment/reservations/${RESERVATION_ID}/intent`) &&
+        req.method() === "POST",
+    );
+
+    await page.goto(paymentUrl({ reservationId: RESERVATION_ID }));
+
+    // POST et non GET : l'appel gèle le balayeur de holds et fait émettre un PaymentIntent.
+    await expect(await request).toBeTruthy();
+  });
+
+  test("aucune demande d'intent quand la vue n'est pas payable", async ({
+    page,
+  }) => {
+    let intentCalls = 0;
+    await mockBff(page, {
+      getBody: reservation({ created: false, status: "Cancelled" }),
+    });
+    page.on("request", (req) => {
+      if (req.url().includes("/intent")) {
+        intentCalls++;
+      }
+    });
+
+    await page.goto(paymentUrl({ reservationId: RESERVATION_ID }));
+    await expect(
+      page.getByTestId("payment-reservation-cancelled"),
+    ).toBeVisible();
+
+    // Demander un intent sur une réservation annulée ferait geler un hold qui n'existe plus.
+    expect(intentCalls).toBe(0);
+  });
+
+  test("service indisponible : l'écran propose de réessayer", async ({
+    page,
+  }) => {
+    await mockBff(page, { intentStatus: 503, intentBody: { success: false } });
+    await page.goto(paymentUrl({ reservationId: RESERVATION_ID }));
+
+    await expect(page.getByTestId("payment-intent-error")).toBeVisible();
+    // « Réessayer » n'a de sens QUE sur une indisponibilité (règle établie en 2.4).
+    await expect(page.getByTestId("payment-intent-error-action")).toBeVisible();
+  });
+
+  test("paiement déjà engagé : aucune invitation à payer une seconde fois", async ({
+    page,
+  }) => {
+    await mockBff(page, {
+      intentStatus: 409,
+      intentBody: {
+        success: false,
+        message: "Le paiement de cette réservation est déjà engagé.",
+        errors: { reason: ["already-authorized"] },
+      },
+    });
+    await page.goto(paymentUrl({ reservationId: RESERVATION_ID }));
+
+    // ⚠️ Corrigé en revue de code : « paiement déjà engagé » veut dire que la carte porte une
+    // retenue. L'écran doit donc rendre l'ÉTAT « autorisé », pas une alerte — et surtout ne pas
+    // reproposer de payer.
+    await expect(page.getByTestId("payment-authorized")).toBeVisible();
+    await expect(page.getByTestId("payment-intent-error")).toHaveCount(0);
+    await expect(page.getByTestId("payment-submit")).toHaveCount(0);
   });
 });

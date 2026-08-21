@@ -386,6 +386,78 @@
         "body": "An unexpected error occurred. No booking was created."
       }
     },
-    "communicationLocaleAttachedNotice": "This preference is kept, but the hotel currently writes in its usual language."
+    "communicationLocaleAttachedNotice": "This preference is kept, but the hotel currently writes in its usual language.",
+    "payment": {
+      "formTitle": "Card payment",
+      "noFirmDebit": "Your card is only authorised: no firm debit is kept before confirmation.",
+      "amountToAuthorize": "Amount authorised: {amount}",
+      "amountUnverified": "The amount will be confirmed by your bank at payment time.",
+      "submit": "Pay",
+      "submitBusy": "Payment in progress…",
+      "retry": "Try again",
+      "retryHint": "Your reservation is kept. Correct your card details and try again.",
+      "authorizedTitle": "Payment authorised",
+      "authorizedBodyHeld": "The funds are held on your card. Your booking confirmation follows; no firm debit is kept until it is issued.",
+      "authorizedBody": "Your payment was accepted. Your booking confirmation follows.",
+      "phase": {
+        "idle": "Preparing payment.",
+        "intentLoading": "Preparing secure payment.",
+        "ready": "Payment form ready.",
+        "confirming": "Payment being processed.",
+        "3ds": "Security check by your bank in progress.",
+        "authorized": "Payment authorised.",
+        "declined": "Payment declined."
+      },
+      "errors": {
+        "already-authorized": {
+          "title": "Payment already under way",
+          "body": "This booking's payment has already been taken into account. No further debit will be made."
+        },
+        "amount-mismatch": {
+          "title": "The amount changed",
+          "body": "Your booking total has changed. Reload the summary before paying."
+        },
+        "currency-unsupported": {
+          "title": "Online payment unavailable",
+          "body": "This property does not accept online payment yet. Contact the hotel to settle your stay."
+        },
+        "reservation-not-found": {
+          "title": "Booking not found",
+          "body": "We cannot find this booking. Start again from the summary."
+        },
+        "reservation-not-pending": {
+          "title": "Booking already processed",
+          "body": "This booking is no longer awaiting payment. Check its status before continuing."
+        },
+        "not-owner": {
+          "title": "Booking not accessible",
+          "body": "This booking is not linked to your account."
+        },
+        "session-invalid": {
+          "title": "Session expired",
+          "body": "Sign in again to resume your payment."
+        },
+        "rejected": {
+          "title": "Payment failed",
+          "body": "The payment could not be initialised. No amount was charged."
+        },
+        "unavailable": {
+          "title": "Service temporarily unavailable",
+          "body": "The payment service is not responding. Your booking is kept: try again shortly."
+        },
+        "unknown": {
+          "title": "Payment failed",
+          "body": "An unexpected error occurred. No amount was charged."
+        },
+        "stripe-unavailable": {
+          "title": "Secure payment unavailable",
+          "body": "The payment module could not load. A content blocker or your network may be the cause. Your booking is kept."
+        },
+        "probe-failed": {
+          "title": "Payment status unknown",
+          "body": "We could not check your payment status. Reload the page to avoid any risk of a double charge."
+        }
+      }
+    }
   }
 }

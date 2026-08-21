@@ -1,6 +1,7 @@
 import { describe, it, expect } from "vitest";
 
 import {
+  isCurrencyExponentReliable,
   currencies,
   currencySymbols,
   defaultCurrency,
@@ -50,5 +51,37 @@ describe("currency: socle devise de travail", () => {
   it("retombe sûrement sur 2 pour un code devise invalide, sans lever", () => {
     expect(() => minorUnitExponent("INVALID_CODE")).not.toThrow();
     expect(minorUnitExponent("INVALID_CODE")).toBe(2);
+  });
+});
+
+/**
+ * `isCurrencyExponentReliable` a été extrait de `booking-payment.tsx` vers ce module par la story
+ * 3.1 : il est désormais partagé par le récapitulatif et par l'écran de paiement. La revue de code
+ * a constaté qu'il n'était couvert par AUCUN test — ni avant, ni après l'extraction.
+ *
+ * Ce qu'il garde : refuser d'afficher, et désormais de faire payer, un montant dont l'exposant
+ * d'unités mineures n'est qu'une supposition. `minorUnitExponent` retombe silencieusement sur 2
+ * pour tout code bien formé, y compris inventé.
+ */
+describe("isCurrencyExponentReliable", () => {
+  it.each(["EUR", "USD", "JPY", "KWD", "eur", "jpy"])(
+    "reconnaît la devise ISO 4217 %s",
+    (currency) => {
+      expect(isCurrencyExponentReliable(currency)).toBe(true);
+    },
+  );
+
+  it.each(["ZZZ", "EURO", "", "12", "€"])(
+    "refuse le code non ISO 4217 « %s »",
+    (currency) => {
+      expect(isCurrencyExponentReliable(currency)).toBe(false);
+    },
+  );
+
+  it("refuse un code inventé bien formé, que minorUnitExponent accepterait", () => {
+    // C'est tout l'intérêt de la fonction : `Intl` prête 2 décimales à n'importe quel code de trois
+    // lettres, si bien qu'une faute de frappe saisie en back-office passerait sans bruit.
+    expect(minorUnitExponent("QQQ")).toBe(2);
+    expect(isCurrencyExponentReliable("QQQ")).toBe(false);
   });
 });

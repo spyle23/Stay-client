@@ -386,6 +386,78 @@
         "body": "Une erreur inattendue est survenue. Aucune réservation n’a été créée."
       }
     },
-    "communicationLocaleAttachedNotice": "Cette préférence est conservée, mais l’hôtel écrit aujourd’hui dans sa langue habituelle."
+    "communicationLocaleAttachedNotice": "Cette préférence est conservée, mais l’hôtel écrit aujourd’hui dans sa langue habituelle.",
+    "payment": {
+      "formTitle": "Paiement par carte",
+      "noFirmDebit": "Votre carte est seulement autorisée : aucun débit ferme n'est conservé avant la confirmation.",
+      "amountToAuthorize": "Montant autorisé : {amount}",
+      "amountUnverified": "Le montant sera confirmé par votre banque au moment du paiement.",
+      "submit": "Payer",
+      "submitBusy": "Paiement en cours…",
+      "retry": "Réessayer",
+      "retryHint": "Votre réservation est conservée. Corrigez vos informations de carte et réessayez.",
+      "authorizedTitle": "Paiement autorisé",
+      "authorizedBodyHeld": "Les fonds sont retenus sur votre carte. La confirmation de votre réservation suit ; aucun débit ferme n'est conservé tant qu'elle n'est pas émise.",
+      "authorizedBody": "Votre paiement a été accepté. La confirmation de votre réservation suit.",
+      "phase": {
+        "idle": "Préparation du paiement.",
+        "intentLoading": "Préparation du paiement sécurisé.",
+        "ready": "Formulaire de paiement prêt.",
+        "confirming": "Paiement en cours de traitement.",
+        "3ds": "Vérification de sécurité par votre banque en cours.",
+        "authorized": "Paiement autorisé.",
+        "declined": "Paiement refusé."
+      },
+      "errors": {
+        "already-authorized": {
+          "title": "Paiement déjà engagé",
+          "body": "Le paiement de cette réservation a déjà été pris en compte. Aucun nouveau débit ne sera effectué."
+        },
+        "amount-mismatch": {
+          "title": "Le montant a changé",
+          "body": "Le total de votre réservation a évolué. Rechargez le récapitulatif avant de payer."
+        },
+        "currency-unsupported": {
+          "title": "Paiement en ligne indisponible",
+          "body": "Cet établissement n'accepte pas encore le paiement en ligne. Contactez l'hôtel pour régler votre séjour."
+        },
+        "reservation-not-found": {
+          "title": "Réservation introuvable",
+          "body": "Nous ne retrouvons pas cette réservation. Reprenez depuis le récapitulatif."
+        },
+        "reservation-not-pending": {
+          "title": "Réservation déjà traitée",
+          "body": "Cette réservation n'est plus en attente de paiement. Consultez son état avant de continuer."
+        },
+        "not-owner": {
+          "title": "Réservation inaccessible",
+          "body": "Cette réservation n'est pas rattachée à votre compte."
+        },
+        "session-invalid": {
+          "title": "Session expirée",
+          "body": "Identifiez-vous à nouveau pour reprendre votre paiement."
+        },
+        "rejected": {
+          "title": "Paiement impossible",
+          "body": "Le paiement n'a pas pu être initialisé. Aucun montant n'a été débité."
+        },
+        "unavailable": {
+          "title": "Service momentanément indisponible",
+          "body": "Le service de paiement ne répond pas. Votre réservation est conservée : réessayez dans un instant."
+        },
+        "unknown": {
+          "title": "Paiement impossible",
+          "body": "Une erreur inattendue est survenue. Aucun montant n'a été débité."
+        },
+        "stripe-unavailable": {
+          "title": "Paiement sécurisé inaccessible",
+          "body": "Le module de paiement n'a pas pu se charger. Un bloqueur de contenu ou votre réseau peut en être la cause. Votre réservation est conservée."
+        },
+        "probe-failed": {
+          "title": "État du paiement indéterminé",
+          "body": "Nous n'avons pas pu vérifier l'état de votre paiement. Rechargez la page pour éviter tout risque de double débit."
+        }
+      }
+    }
   }
 }

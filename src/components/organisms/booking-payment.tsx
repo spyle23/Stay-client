@@ -16,6 +16,7 @@ import { useLocale, useTranslations } from "next-intl";
 import { BookingPreferences as BookingPreferencesForm } from "@/components/molecules/booking-preferences";
 import { ServiceUpsell } from "@/components/molecules/service-upsell";
 import { useUpsellServices } from "@/hooks/use-upsell-services";
+import { BookingPaymentForm } from "@/components/organisms/booking-payment-form";
 import { BookingSummary } from "@/components/organisms/booking-summary";
 import { Button, buttonVariants } from "@/components/ui/button";
 import { Skeleton } from "@/components/ui/skeleton";
@@ -27,6 +28,7 @@ import { useBookingQuote } from "@/hooks/use-booking-quote";
 import { useSession } from "@/hooks/use-session";
 import { ApiClientError } from "@/lib/api-client";
 import { localeNames, type Locale } from "@/i18n/config";
+import { isCurrencyExponentReliable } from "@/lib/currency";
 import { cn, formatCurrency } from "@/lib/utils";
 import {
   defaultBookingPreferences,
@@ -1019,15 +1021,23 @@ function ReservationPanel({
         </div>
       ) : null}
 
-      {/* Emplacement du Payment Element (story 3.1) — réservé à une `Pending` au hold actif.
-          Aucune promesse de délai ici : annoncer une date que l'on ne tient pas serait la même
-          faute que « confirmation envoyée ». */}
+      {/* Payment Element (story 3.1) — réservé à une `Pending` au hold actif.
+          ⚠️ La condition `view === "payable"` porte la garde anti-double-débit : elle exclut
+          `settled`, `cancelled`, `hold-expired` et `unknown`. Ne pas l'élargir — proposer de payer
+          une réservation dont on ignore l'état est précisément le chemin que l'AC-9 de la 2.4
+          interdit.
+          Le montant qui engage reste celui de l'intent ; `total`/`currency` ne servent ici qu'à
+          détecter une divergence d'affichage. */}
       {view === "payable" ? (
-        <div
-          className="rounded-lg border border-dashed border-border p-4 text-small text-muted-foreground"
-          data-testid="payment-element-placeholder"
-        >
-          {t("paymentPlaceholder")}
+        // `data-testid` conservé depuis l'emplacement réservé de la 2.4 : il désigne LA FENTE de
+        // paiement, pas son contenu. Les tests qui vérifient « aucune autre vue ne propose de
+        // payer » restent donc valides sans dépendre de l'état interne du formulaire.
+        <div data-testid="payment-element-placeholder">
+          <BookingPaymentForm
+            reservationId={reservation.reservationId}
+            expectedTotal={reservation.total}
+            expectedCurrency={reservation.currency}
+          />
         </div>
       ) : null}
 
@@ -1831,33 +1841,6 @@ function quoteErrorBody(error: unknown, t: (key: string) => string): string {
   return isRetryableQuoteError(error)
     ? t("degradedBody")
     : t("stayRejectedBody");
-}
-
-/** Codes devise connus de l'ICU, résolus une seule fois (la liste en compte ~300). */
-let icuCurrencyCodes: ReadonlySet<string> | undefined;
-
-/**
- * L'exposant d'unités mineures de cette devise est-il **réellement** connu ?
- *
- * `minorUnitExponent` (front) et `minorUnitExponent` (BFF) retombent tous deux sur 2 décimales
- * pour une devise que l'ICU ne connaît pas — et un code libre saisi en back-office passe sans
- * lever : `Intl` accepte n'importe quel code bien formé et lui prête 2 décimales par défaut. La
- * seule vérification fiable est l'appartenance à la liste ICU.
- */
-function isCurrencyExponentReliable(currency: string): boolean {
-  if (icuCurrencyCodes === undefined) {
-    try {
-      icuCurrencyCodes = new Set(Intl.supportedValuesOf("currency"));
-    } catch {
-      icuCurrencyCodes = new Set<string>();
-    }
-  }
-  if (icuCurrencyCodes.size === 0) {
-    // Environnement sans `Intl.supportedValuesOf` : on ne peut pas trancher. On ne fabrique pas un
-    // doute qui masquerait tous les montants — on se limite au code manifestement non formable.
-    return /^[A-Za-z]{3}$/.test(currency);
-  }
-  return icuCurrencyCodes.has(currency.toUpperCase());
 }
 
 /**

@@ -64,6 +64,27 @@ function uniqueStayOffset(slot: number): number {
   // (2 nuits), et l'espacement des bandes (70 j) dépasse l'amplitude d'un cycle (60 j).
   return 60 + slot * 70 + (Math.floor(Date.now() / 60_000) % 20) * 3;
 }
+/**
+ * Fenêtre de séjour d'un scénario de **paiement**, neuve à chaque exécution.
+ *
+ * ⚠️ Ces scénarios-là ne sont pas seulement « non rejouables pendant la durée du hold » : ils sont
+ * **définitivement** consommateurs d'inventaire. Dès que l'écran de paiement demande son intent, le
+ * BFF pose `paymentStarted` sur le hold — et le balayeur n'annule plus jamais cette `Pending`
+ * (FR-14). Tant que la story 3.3 n'a pas livré la libération d'une autorisation abandonnée, chaque
+ * exécution immobilise donc une chambre pour de bon sur sa fenêtre.
+ *
+ * `uniqueStayOffset` (dérivé de la minute courante) ne suffit pas : son cycle de 20 minutes ramène
+ * les mêmes dates, sur une chambre qui, elle, ne sera plus jamais rendue. On tire donc une fenêtre
+ * au hasard dans une bande large et lointaine, hors de portée des scénarios non payants.
+ */
+function paidStayOffset(slot: number): number {
+  // ⚠️ Chaque scénario payant reçoit sa PROPRE bande de 300 jours, disjointe des autres : les deux
+  // s'exécutent en parallèle sur une chambre unique, et un tirage commun les faisait se disputer
+  // l'inventaire environ une exécution sur cinq. La part aléatoire (290 j) sert à ne pas retomber
+  // sur la fenêtre d'une exécution précédente — définitivement consommée, puisque le hold reste gelé.
+  return 700 + slot * 300 + Math.floor(Math.random() * 290);
+}
+
 function searchUrl(startsInDays: number): string {
   const params = new URLSearchParams({
     destination: "a",
@@ -87,11 +108,28 @@ function watchForFailures(page: Page, expected: number[] = []): string[] {
   page.on("pageerror", (err) => failures.push(`pageerror: ${err.message}`));
   page.on("requestfailed", (req) => {
     const error = req.failure()?.errorText ?? "inconnu";
-    // Une charge utile RSC (`_rsc=`) annulée par une navigation ultérieure n'est pas un défaut :
-    // `router.replace` en émet une, et le test enchaîne aussitôt sur un `goto`. Le navigateur
-    // abandonne alors la précédente — exactement ce qu'il fait quand un visiteur clique ailleurs
-    // pendant un chargement. Filtre volontairement étroit : tout autre échec réseau reste signalé.
-    if (error === "net::ERR_ABORTED" && req.url().includes("_rsc=")) {
+    // Requêtes **abandonnées par une navigation** : ce n'est pas un défaut, c'est ce que fait le
+    // navigateur quand un visiteur clique ailleurs pendant un chargement.
+    //
+    // - `_rsc=` : `router.replace` en émet une, et le test enchaîne aussitôt sur un `goto` ;
+    // - `/payment/…/intent` et `js.stripe.com` (story 3.1) : l'écran de paiement demande son intent
+    //   et charge Stripe.js dès qu'il devient payable ; les scénarios qui quittent aussitôt la page
+    //   (divergence, idempotence, préférences) les abandonnent en vol ;
+    // - `hcaptcha.com` : ressource **tierce chargée par l'iframe Stripe** (détection de robots),
+    //   abandonnée quand cette iframe est démontée après l'autorisation. Rien de ce que nous
+    //   servons, rien que nous puissions corriger.
+    //
+    // Filtre volontairement **étroit** : tout autre échec réseau, et tout échec qui n'est pas un
+    // abandon, reste signalé.
+    const abandonedOnNavigation =
+      req.url().includes("_rsc=") ||
+      /\/payment\/reservations\/[^/]+\/intent$/.test(
+        new URL(req.url()).pathname,
+      ) ||
+      /(^|\.)(js\.stripe\.com|hcaptcha\.com)$/.test(
+        new URL(req.url()).hostname,
+      );
+    if (error === "net::ERR_ABORTED" && abandonedOnNavigation) {
       return;
     }
     failures.push(`requestfailed: ${req.method()} ${req.url()} — ${error}`);
@@ -122,6 +160,55 @@ function watchCreations(page: Page): string[] {
     }
   });
   return creations;
+}
+
+/**
+ * Saisit la carte de test dans le Payment Element (story 3.1).
+ *
+ * ⚠️ Stripe monte **plusieurs** `__privateStripeFrame` (le formulaire, plus des frames de contrôle
+ * invisibles) : un `frameLocator` non qualifié viole le mode strict de Playwright. On repère donc
+ * la frame qui porte réellement le champ « numéro de carte », et on saisit tout dedans.
+ */
+async function fillTestCard(page: Page): Promise<void> {
+  const cardLabel = /card number|numéro de carte/i;
+  const expiryLabel = /expiration|expiry|MM ?\/ ?YY|MM ?\/ ?AA/i;
+  // ⚠️ Les libellés du Payment Element suivent la locale du navigateur, qui n'est pas garantie
+  // d'une exécution à l'autre : les deux langues du produit sont donc couvertes.
+  const cvcLabel = /CVC|CVV|cryptogramme|code de sécurité|security code/i;
+  const selector = 'iframe[name^="__privateStripeFrame"]';
+
+  // ⚠️ L'iframe est attachée bien AVANT que Stripe n'y ait rendu ses champs : inspecter les frames
+  // une seule fois ne trouve rien et échoue à tort. On sonde donc jusqu'à ce que le champ existe.
+  const deadline = Date.now() + 40_000;
+  let target: ReturnType<Page["frameLocator"]> | null = null;
+
+  while (Date.now() < deadline && target === null) {
+    const count = await page.locator(selector).count();
+    for (let i = 0; i < count; i++) {
+      const frame = page.frameLocator(selector).nth(i);
+      if ((await frame.getByRole("textbox", { name: cardLabel }).count()) > 0) {
+        target = frame;
+        break;
+      }
+    }
+    if (target === null) {
+      await page.waitForTimeout(500);
+    }
+  }
+
+  if (target === null) {
+    throw new Error(
+      "Aucune frame Stripe ne porte le champ « numéro de carte » : le Payment Element n'a pas fini de se monter.",
+    );
+  }
+
+  const cardNumber = target.getByRole("textbox", { name: cardLabel });
+  await expect(cardNumber).toBeVisible({ timeout: 15_000 });
+  await cardNumber.fill("4242424242424242");
+  await target
+    .getByRole("textbox", { name: expiryLabel })
+    .fill("12" + String(new Date().getFullYear() + 3).slice(-2));
+  await target.getByRole("textbox", { name: cvcLabel }).fill("123");
 }
 
 /** Parcours réel jusqu'à l'étape de paiement, invité provisionné au passage. */
@@ -552,4 +639,119 @@ test("Upsell de services contre le vrai PMS : catalogue, panier accepté, total 
   expect(persistedMinor).toBe(submitted);
 
   expect(failures).toEqual([]);
+});
+
+/**
+ * Story 3.1 — **autorisation carte réelle** contre le vrai stack et le vrai Stripe (mode test).
+ *
+ * Ce que ni l'e2e isolé ni les tests d'intégration ne peuvent prouver :
+ * - que le PMS crée bien un PaymentIntent en **capture manuelle** — l'intent atteint le statut
+ *   `requires_capture`, et **rien n'est encaissé** ;
+ * - que le `clientSecret` relayé par le BFF est réellement exploitable par Stripe.js (un jeton
+ *   mal formé ou périmé ne se voit qu'ici) ;
+ * - que la confirmation se résout **sans quitter le tunnel** (`redirect: "if_required"`) ;
+ *
+ * ⚠️ Ce scénario N'EXERCE PAS la 3-D Secure : il utilise la carte `4242…`, qui n'en déclenche
+ * aucune. La carte 3-DS (`4000 0025 0000 3155`) ouvre une modale hébergée par Stripe dont
+ * l'automatisation est fragile ; la branche `requires_action` est couverte en test d'intégration
+ * (mock de `confirmPayment`). L'affirmation contraire figurait ici avant la revue de code 3.1 —
+ * c'était une sur-déclaration.
+ * - qu'après autorisation, l'écran n'annonce **jamais** une réservation confirmée (AC-8).
+ *
+ * ⚠️ Ce test place une vraie autorisation sur une carte de test Stripe. Elle n'est jamais capturée
+ * (c'est le périmètre de la story 3.2) et expire d'elle-même sous ~7 jours.
+ */
+test("Paiement carte contre le vrai Stripe : autorisation sans capture, sans quitter le tunnel", async ({
+  page,
+}) => {
+  // Budget élargi : ce scénario enchaîne de vrais aller-retours réseau avec Stripe (chargement de
+  // js.stripe.com, montage du Payment Element, confirmation, sonde de statut). Les 30 s par défaut
+  // suffisent aux scénarios qui ne parlent qu'au stack local, pas à celui-ci.
+  test.setTimeout(150_000);
+  const failures = watchForFailures(page);
+  const email = `smoke-pay-${Date.now()}@example.com`;
+
+  await goToPayment(page, email, paidStayOffset(0));
+
+  const cta = page.getByTestId("payment-create-cta");
+  await expect(cta).toBeEnabled({ timeout: 20_000 });
+  await cta.click();
+
+  await expect(page.getByTestId("payment-reservation-code")).toBeVisible({
+    timeout: 20_000,
+  });
+
+  // Le formulaire n'apparaît qu'une fois l'intent obtenu du BFF **et** Stripe.js chargé.
+  const form = page.getByTestId("payment-form");
+  await expect(form).toBeVisible({ timeout: 30_000 });
+
+  // AC-1 : la promesse « aucun débit ferme » est portée par le `captureMethod` renvoyé par le PMS.
+  // Si le PaymentIntent n'était pas en capture manuelle, ce bloc disparaîtrait au lieu de mentir.
+  await expect(page.getByTestId("payment-no-firm-debit")).toBeVisible();
+
+  // Saisie de la carte de test dans l'iframe Stripe. Le Payment Element expose un seul champ
+  // combiné ; on le remplit par saisie clavier plutôt que par sélecteurs internes (instables).
+  await fillTestCard(page);
+
+  await page.getByTestId("payment-submit").click();
+
+  // AC-3 : l'autorisation aboutit **sur la page** (`redirect: "if_required"`).
+  const authorized = page.getByTestId("payment-authorized");
+  await expect(authorized).toBeVisible({ timeout: 60_000 });
+  await expect(page).toHaveURL(/\/booking\/payment\?/);
+
+  // AC-8 : autorisé n'est PAS confirmé. Aucun code de confirmation, aucun QR, aucun PDF, aucune
+  // promesse d'e-mail — c'est le périmètre de la story 3.2. Défaut réel trouvé en Phase 3 de 2.3.
+  await expect(authorized).not.toContainText(/confirmée|e-?mail|QR|PDF/i);
+
+  // La réservation reste `Pending` : seule la confirmation la fera basculer.
+  await expect(page.getByTestId("payment-reservation-panel")).toHaveAttribute(
+    "data-status",
+    "Pending",
+  );
+
+  // Le formulaire a disparu : reproposer de payer une carte déjà autorisée serait le chemin du
+  // double débit (AC-6).
+  await expect(page.getByTestId("payment-submit")).toHaveCount(0);
+
+  expect(failures, `échecs console/réseau : ${failures.join(" | ")}`).toEqual(
+    [],
+  );
+});
+
+/**
+ * Story 3.1 / AC-6 — un rechargement après autorisation ne repropose jamais de payer.
+ *
+ * L'écran doit relire l'état réel de l'intent chez Stripe (`requires_capture`) et rendre l'état
+ * « autorisé », et non un formulaire vierge. Le PMS, de son côté, refuse d'émettre un second intent.
+ */
+test("Rechargement après autorisation : aucune seconde invitation à payer", async ({
+  page,
+}) => {
+  test.setTimeout(150_000);
+  const email = `smoke-pay2-${Date.now()}@example.com`;
+
+  await goToPayment(page, email, paidStayOffset(1));
+  await page.getByTestId("payment-create-cta").click();
+  await expect(page.getByTestId("payment-reservation-code")).toBeVisible({
+    timeout: 20_000,
+  });
+
+  const form = page.getByTestId("payment-form");
+  await expect(form).toBeVisible({ timeout: 30_000 });
+
+  await fillTestCard(page);
+  await page.getByTestId("payment-submit").click();
+
+  await expect(page.getByTestId("payment-authorized")).toBeVisible({
+    timeout: 60_000,
+  });
+
+  await page.reload();
+
+  // Après rechargement : toujours autorisé, jamais un nouveau formulaire de paiement.
+  await expect(page.getByTestId("payment-authorized")).toBeVisible({
+    timeout: 30_000,
+  });
+  await expect(page.getByTestId("payment-submit")).toHaveCount(0);
 });
