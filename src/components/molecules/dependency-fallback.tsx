@@ -7,7 +7,7 @@ import { cn } from "@/lib/utils";
  * Repli de dépendance PMS (UX-DR-2.16, UX-DR-4.6, UX-DR-7.14).
  *
  * Certaines features dépendent d'évolutions du PMS non encore livrées (D2 politique d'annulation,
- * D6 upsell, D7 taxe/facture). Tant qu'elles manquent, l'interface doit rester **honnête et
+ * D7 taxe/facture ; D6 panier combiné a été livrée par la story 2.0). Tant qu'elles manquent, l'interface doit rester **honnête et
  * calme** : un bandeau discret qui explique, jamais une erreur brute, jamais un champ vide, et
  * surtout jamais une valeur inventée pour « remplir » l'écran.
  *
@@ -20,7 +20,7 @@ export function DependencyFallback({
   className,
   "data-testid": dataTestId,
 }: {
-  /** Identifiant de la dépendance PMS concernée (`D2`, `D6`, `D7`). */
+  /** Identifiant de la dépendance PMS concernée (`D2`, `D7`, `D10`). */
   dependency: string;
   children: ReactNode;
   className?: string;

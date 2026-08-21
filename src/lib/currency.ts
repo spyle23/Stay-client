@@ -74,3 +74,30 @@ export function minorUnitExponent(currency: string): number {
   derivedExponentCache.set(currency, exponent);
   return exponent;
 }
+
+/** Codes devise connus de l'ICU, résolus une seule fois (la liste en compte ~300). */
+let icuCurrencyCodes: ReadonlySet<string> | undefined;
+
+/**
+ * L'exposant d'unités mineures de cette devise est-il **réellement** connu ?
+ *
+ * `minorUnitExponent` (front) et `minorUnitExponent` (BFF) retombent tous deux sur 2 décimales
+ * pour une devise que l'ICU ne connaît pas — et un code libre saisi en back-office passe sans
+ * lever : `Intl` accepte n'importe quel code bien formé et lui prête 2 décimales par défaut. La
+ * seule vérification fiable est l'appartenance à la liste ICU.
+ */
+export function isCurrencyExponentReliable(currency: string): boolean {
+  if (icuCurrencyCodes === undefined) {
+    try {
+      icuCurrencyCodes = new Set(Intl.supportedValuesOf("currency"));
+    } catch {
+      icuCurrencyCodes = new Set<string>();
+    }
+  }
+  if (icuCurrencyCodes.size === 0) {
+    // Environnement sans `Intl.supportedValuesOf` : on ne peut pas trancher. On ne fabrique pas un
+    // doute qui masquerait tous les montants — on se limite au code manifestement non formable.
+    return /^[A-Za-z]{3}$/.test(currency);
+  }
+  return icuCurrencyCodes.has(currency.toUpperCase());
+}

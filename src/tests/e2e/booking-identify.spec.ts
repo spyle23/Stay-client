@@ -166,8 +166,10 @@ test.describe("Identification invité ou compte (isolé, BFF mocké)", () => {
     await expect(page).toHaveURL(new RegExp(`hotelId=${HOTEL_ID}`));
     await expect(page).toHaveURL(new RegExp(`roomId=${ROOM_ID}`));
     await expect(page).toHaveURL(/guests=2/);
-    // La route existe : aucun lien mort (AC-8).
-    await expect(page.getByTestId("booking-payment-placeholder")).toBeVisible();
+    // La route existe : aucun lien mort (AC-8). Depuis la story 2.4 elle porte l'étape réelle de
+    // création, et la session ouverte par le Checkout invité y donne directement accès (la
+    // navigation reste côté client : le cache de session survit).
+    await expect(page.getByTestId("payment-create-cta")).toBeVisible();
   });
 
   test("aucun mot de passe n’est transmis par le navigateur", async ({

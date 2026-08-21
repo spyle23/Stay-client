@@ -144,12 +144,22 @@ describe("BookingRecap (intégration)", () => {
     // Le nombre de voyageurs est RÉELLEMENT modifié (2 → 3) avant soumission : resoumettre le
     // formulaire inchangé prouverait seulement qu'il soumet, pas qu'une modification se propage.
     fireEvent.click(screen.getByTestId("guest-selector-trigger"));
-    fireEvent.click(await screen.findByTestId("guest-increase"));
+    // ⚠️ Patience explicite, et non un défaut implicite de 5 s : `GuestSelector` ouvre un popover
+    // monté dans un portail, dont l'apparition dépend de la file d'animation de jsdom. Sous la
+    // charge de la suite complète (50 fichiers en parallèle), 5 s ne suffisaient pas — ce test
+    // tombait environ une exécution sur deux depuis la story 2.2, en isolation toujours vert.
+    // Ce n'est pas un défaut du composant : c'est le harnais qui doit attendre le montage réel.
+    // Même discipline que `expectFocusOn` dans `booking-payment.test.tsx`.
+    fireEvent.click(
+      await screen.findByTestId("guest-increase", {}, { timeout: 20_000 }),
+    );
     expect(screen.getByTestId("guest-count").textContent).toBe("3");
 
     fireEvent.submit(screen.getByTestId("booking-stay-editor"));
 
-    await waitFor(() => expect(replace).toHaveBeenCalledTimes(1));
+    await waitFor(() => expect(replace).toHaveBeenCalledTimes(1), {
+      timeout: 20_000,
+    });
     const [url, options] = replace.mock.calls[0] as [
       string,
       { scroll?: boolean },

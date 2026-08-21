@@ -2,8 +2,14 @@ import { describe, expect, it } from "vitest";
 
 import {
   bookingContextQuery,
+  defaultBookingPreferences,
+  normalizeSpecialRequests,
+  specialRequestsLength,
+  syncPreferencesLocale,
   parseBookingParams,
   parseGuid,
+  SPECIAL_REQUESTS_MAX_LENGTH,
+  validateBookingPreferences,
 } from "@/lib/validations/booking";
 import { MAX_STAY_NIGHTS } from "@/lib/validations/search";
 
@@ -191,5 +197,156 @@ describe("bookingContextQuery", () => {
     expect(qs.get("checkOutDate")).toBe(validParams.checkOutDate);
     expect(qs.get("guests")).toBe("2");
     expect(qs.get("currency")).toBe("EUR");
+  });
+
+  /**
+   * Story 2.5, AC-9 — frontière de conception, pas un oubli.
+   *
+   * Une demande spéciale est un texte libre pouvant relever du RGPD art. 9 (santé, régime,
+   * accessibilité). L'URL est partagée, historisée, envoyée en `Referer` et journalisée par tous
+   * les intermédiaires : ces deux champs n'y entrent jamais.
+   */
+  it("ne fait JAMAIS voyager les préférences dans l’URL", () => {
+    const parsed = parseBookingParams(validParams);
+    expect(parsed.ok).toBe(true);
+    if (!parsed.ok) return;
+
+    const qs = bookingContextQuery(parsed.value);
+    expect(qs).not.toContain("specialRequests");
+    expect(qs).not.toContain("communicationLocale");
+    expect(Array.from(new URLSearchParams(qs).keys()).sort()).toEqual([
+      "checkInDate",
+      "checkOutDate",
+      "currency",
+      "guests",
+      "hotelId",
+      "roomId",
+    ]);
+  });
+});
+
+describe("préférences de réservation (story 2.5, FR-10)", () => {
+  it("accepte une saisie vide — les deux champs sont facultatifs", () => {
+    expect(
+      validateBookingPreferences({
+        specialRequests: "",
+        communicationLocale: "fr",
+        localeTouched: true,
+      }),
+    ).toEqual([]);
+  });
+
+  it("accepte exactement la borne", () => {
+    expect(
+      validateBookingPreferences({
+        specialRequests: "a".repeat(SPECIAL_REQUESTS_MAX_LENGTH),
+        communicationLocale: "fr",
+        localeTouched: true,
+      }),
+    ).toEqual([]);
+  });
+
+  it("refuse au-delà de la borne", () => {
+    expect(
+      validateBookingPreferences({
+        specialRequests: "a".repeat(SPECIAL_REQUESTS_MAX_LENGTH + 1),
+        communicationLocale: "fr",
+        localeTouched: true,
+      }),
+    ).toEqual(["specialRequestsTooLong"]);
+  });
+
+  it("mesure la longueur `trim`ée, comme le BFF après normalisation", () => {
+    // Refuser un texte à cause de ses espaces de bord serait incompréhensible côté voyageur.
+    expect(
+      validateBookingPreferences({
+        specialRequests: `   ${"a".repeat(SPECIAL_REQUESTS_MAX_LENGTH)}   `,
+        communicationLocale: "fr",
+        localeTouched: true,
+      }),
+    ).toEqual([]);
+  });
+
+  it("reste alignée sur la borne du BFF", () => {
+    // Dépôts séparés : aucun test ne peut vérifier l'égalité des deux constantes. Ce garde-fou
+    // documente au moins la valeur attendue — si elle change ici, elle doit changer là-bas.
+    expect(SPECIAL_REQUESTS_MAX_LENGTH).toBe(1000);
+  });
+
+  it("propose par défaut la langue de l’interface courante, sans la compter comme un choix", () => {
+    expect(defaultBookingPreferences("en")).toEqual({
+      specialRequests: "",
+      communicationLocale: "en",
+      // …mais NON touchée : afficher n'est pas choisir. Rien ne partira au BFF tant que le
+      // voyageur n'y touche pas, ce qui rend l'état « aucun choix » représentable (F6).
+      localeTouched: false,
+    });
+  });
+
+  it("retombe sur `fr` pour une locale inconnue (cookie retouché)", () => {
+    // Envoyer une locale hors liste ferait refuser la création en 400 par le BFF.
+    expect(defaultBookingPreferences("de").communicationLocale).toBe("fr");
+    expect(defaultBookingPreferences("").communicationLocale).toBe("fr");
+  });
+});
+
+describe("préférences — corrections de la 2ᵉ passe de revue", () => {
+  /**
+   * F5 — le front mesurait `trim().length`, le BFF mesure après normalisation complète.
+   * `trim()` ne retire ni U+00AD, ni U+200B, ni les caractères de contrôle : un texte collé depuis
+   * un PDF affichait « 1002 / 1000 » et était refusé **localement**, alors que le BFF aurait mesuré
+   * 1000 et accepté. Le front était plus strict que l'autorité.
+   */
+  it("mesure la longueur comme le BFF, caractères invisibles compris", () => {
+    const invisibles = "­­" + "a".repeat(1000);
+    expect(specialRequestsLength(invisibles)).toBe(1000);
+    expect(
+      validateBookingPreferences({
+        specialRequests: invisibles,
+        communicationLocale: "fr",
+        localeTouched: false,
+      }),
+    ).toEqual([]);
+  });
+
+  it("normalise exactement comme le BFF (mêmes règles, même ordre)", () => {
+    expect(normalizeSpecialRequests("  Ligne 1\r\nLigne 2  ")).toBe(
+      "Ligne 1\nLigne 2",
+    );
+    // Espace, pas suppression : un retrait sec collerait les mots.
+    expect(normalizeSpecialRequests("Chambre\tcalme")).toBe("Chambre calme");
+    expect(normalizeSpecialRequests("Vue\u200bmer")).toBe("Vue mer");
+    expect(normalizeSpecialRequests("   ")).toBe("");
+  });
+
+  /** F6 — « aucun choix » doit rester représentable. */
+  it("le défaut n'est pas un choix", () => {
+    expect(defaultBookingPreferences("fr").localeTouched).toBe(false);
+  });
+
+  /**
+   * F14 — `LocaleSwitcher` écrit un cookie puis `router.refresh()`, qui **préserve** l'état client :
+   * sans resynchronisation, l'interface passait en anglais pendant que le sélecteur restait sur
+   * « Français », et c'est cette valeur périmée qui partait au BFF.
+   */
+  it("réaligne la langue non touchée sur la locale d'interface", () => {
+    const initial = defaultBookingPreferences("fr");
+    expect(syncPreferencesLocale(initial, "en").communicationLocale).toBe("en");
+  });
+
+  it("n'écrase JAMAIS un choix explicite du voyageur", () => {
+    const choisi = { ...defaultBookingPreferences("fr"), localeTouched: true };
+    expect(syncPreferencesLocale(choisi, "en").communicationLocale).toBe("fr");
+  });
+
+  it("renvoie la même référence quand rien ne change (pas de rendu inutile)", () => {
+    const initial = defaultBookingPreferences("fr");
+    expect(syncPreferencesLocale(initial, "fr")).toBe(initial);
+  });
+
+  it("ignore une locale d'interface inconnue plutôt que de la propager", () => {
+    // Le BFF refuserait « de » en 400 : la resynchronisation ne doit pas fabriquer cette valeur.
+    const initial = defaultBookingPreferences("fr");
+    expect(syncPreferencesLocale(initial, "de").communicationLocale).toBe("fr");
   });
 });
