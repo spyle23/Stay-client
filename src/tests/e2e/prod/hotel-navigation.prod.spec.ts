@@ -142,6 +142,32 @@ test.describe("Titre du document en production (#148, AC-3)", () => {
     expect(audit.violations).toEqual([]);
   });
 
+  test("le <title> de la fiche chambre est dans <head> dès le DOMContentLoaded et axe document-title passe", async ({
+    page,
+  }) => {
+    // QA #148 : AC-3 vise la fiche chambre comme la fiche hôtel (échec d'origine : room.smoke.spec.ts).
+    await page.addInitScript(() => {
+      document.addEventListener("DOMContentLoaded", () => {
+        (window as unknown as { __titleAtDcl: string | null }).__titleAtDcl =
+          document.head.querySelector("title")?.textContent ?? null;
+      });
+    });
+    await page.goto(
+      `/hotels/hotel-${GUID_PREFIX}10/rooms/11111111-1111-1111-1111-111111111111?checkInDate=${futureDate(30)}&checkOutDate=${futureDate(33)}&guests=2`,
+    );
+    await expect(page.getByTestId("room-degraded")).toBeVisible();
+
+    const titleAtDcl = await page.evaluate(
+      () => (window as unknown as { __titleAtDcl: string | null }).__titleAtDcl,
+    );
+    expect(titleAtDcl?.trim()).toBeTruthy();
+
+    const audit = await new AxeBuilder({ page })
+      .withRules(["document-title"])
+      .analyze();
+    expect(audit.violations).toEqual([]);
+  });
+
   test("le titre n'est jamais vide pendant la navigation recherche → fiche hôtel", async ({
     page,
   }) => {
