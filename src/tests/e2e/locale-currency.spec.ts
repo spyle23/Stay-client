@@ -5,7 +5,7 @@ const WCAG_TAGS = ["wcag2a", "wcag2aa", "wcag21a", "wcag21aa"];
 
 // E2E (Story 1.5) : bascule langue (fr/en) sans perte de contexte + bascule
 // devise de travail (EUR/USD) segmentée et persistée, header accessible (axe
-// clair ET sombre). Tourne isolément contre le dev server (port 3000).
+// clair ET sombre). Tourne isolément contre le dev server (port E2E_PORT, 3000 par défaut).
 test.describe("i18n & sélecteurs langue/devise", () => {
   test.beforeEach(async ({ page }) => {
     await page.goto("/");
