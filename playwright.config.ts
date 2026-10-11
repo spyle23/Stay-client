@@ -1,5 +1,15 @@
 import { defineConfig, devices } from "@playwright/test";
 
+import { resolveE2EPort } from "./e2e/web-port";
+
+/**
+ * Port du serveur web lu depuis `E2E_PORT` (défaut 3000, spyle23/hotelerie#106) : un worktree de
+ * ticket reçoit un port propre des portes et de `resource-lock.mjs run e2e-web`.
+ */
+const E2E_PORT = resolveE2EPort();
+const WEB_URL = `http://localhost:${E2E_PORT}`;
+const hasTicketPort = !!process.env.E2E_PORT?.trim();
+
 // Config e2e front (Story 1.1 — socle e2e). Démarre le dev server puis teste le parcours.
 export default defineConfig({
   testDir: "./src/tests/e2e",
@@ -17,13 +27,15 @@ export default defineConfig({
   workers: process.env.CI ? undefined : 4,
   reporter: "list",
   use: {
-    baseURL: "http://localhost:3000",
+    baseURL: WEB_URL,
     trace: "on-first-retry",
   },
   projects: [{ name: "chromium", use: { ...devices["Desktop Chrome"] } }],
   webServer: {
-    command: "yarn dev",
-    url: "http://localhost:3000",
+    // Port explicite (`-p` et `PORT`) quand E2E_PORT est fourni ; sinon commande historique.
+    command: hasTicketPort ? `yarn dev -p ${E2E_PORT}` : "yarn dev",
+    url: WEB_URL,
+    env: { PORT: String(E2E_PORT) },
     reuseExistingServer: !process.env.CI,
     timeout: 120_000,
   },
