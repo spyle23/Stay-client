@@ -1,5 +1,6 @@
 import { test, expect, type Page } from "@playwright/test";
 import AxeBuilder from "@axe-core/playwright";
+import { watchForFailures, type WatchOptions } from "./helpers/network-probe";
 
 /**
  * Smoke full-stack — création de la Réservation `Pending` (Phase 3, périmètre CLIENT, story 2.4).
@@ -96,57 +97,16 @@ function searchUrl(startsInDays: number): string {
   return `/search?${params.toString()}`;
 }
 
-/** Collecte les erreurs **console ET réseau** (Phase 3 : « 0 erreur console/réseau »). */
-function watchForFailures(page: Page, expected: number[] = []): string[] {
-  const failures: string[] = [];
-  page.on("console", (msg) => {
-    if (msg.type() !== "error") return;
-    const status = /status of (\d{3})/.exec(msg.text())?.[1];
-    if (status !== undefined && expected.includes(Number(status))) return;
-    failures.push(`console: ${msg.text()}`);
-  });
-  page.on("pageerror", (err) => failures.push(`pageerror: ${err.message}`));
-  page.on("requestfailed", (req) => {
-    const error = req.failure()?.errorText ?? "inconnu";
-    // Requêtes **abandonnées par une navigation** : ce n'est pas un défaut, c'est ce que fait le
-    // navigateur quand un visiteur clique ailleurs pendant un chargement.
-    //
-    // - `_rsc=` : `router.replace` en émet une, et le test enchaîne aussitôt sur un `goto` ;
-    // - `/payment/…/intent` et `js.stripe.com` (story 3.1) : l'écran de paiement demande son intent
-    //   et charge Stripe.js dès qu'il devient payable ; les scénarios qui quittent aussitôt la page
-    //   (divergence, idempotence, préférences) les abandonnent en vol ;
-    // - `hcaptcha.com` : ressource **tierce chargée par l'iframe Stripe** (détection de robots),
-    //   abandonnée quand cette iframe est démontée après l'autorisation. Rien de ce que nous
-    //   servons, rien que nous puissions corriger.
-    //
-    // Filtre volontairement **étroit** : tout autre échec réseau, et tout échec qui n'est pas un
-    // abandon, reste signalé.
-    const abandonedOnNavigation =
-      req.url().includes("_rsc=") ||
-      /\/payment\/reservations\/[^/]+\/intent$/.test(
-        new URL(req.url()).pathname,
-      ) ||
-      /(^|\.)(js\.stripe\.com|hcaptcha\.com)$/.test(
-        new URL(req.url()).hostname,
-      );
-    if (error === "net::ERR_ABORTED" && abandonedOnNavigation) {
-      return;
-    }
-    failures.push(`requestfailed: ${req.method()} ${req.url()} — ${error}`);
-  });
-  page.on("response", (res) => {
-    if (
-      res.status() >= 400 &&
-      /\/api\/v1\//.test(res.url()) &&
-      !expected.includes(res.status())
-    ) {
-      failures.push(
-        `http ${res.status()}: ${res.request().method()} ${res.url()}`,
-      );
-    }
-  });
-  return failures;
-}
+/**
+ * Sonde console/réseau de ce smoke : la sonde partagée (`helpers/network-probe.ts`, #125), plus un
+ * abandon propre à l'écran de paiement. Il demande son intent (story 3.1) dès qu'il devient payable,
+ * et les scénarios qui quittent aussitôt la page (divergence, idempotence, préférences) abandonnent
+ * cette requête en vol : ce n'est pas un défaut. Seul cet abandon-là est ignoré ; tout autre échec
+ * vers le BFF reste compté.
+ */
+const PAYMENT_PROBE: WatchOptions = {
+  abortablePaths: [/\/payment\/reservations\/[^/]+\/intent$/],
+};
 
 /** Créations réellement émises par le navigateur — l'invariant « jamais au montage ». */
 function watchCreations(page: Page): string[] {
@@ -246,7 +206,7 @@ async function goToPayment(
 test("Création d’une réservation contre le vrai PMS : code, total au centime, hold et reprise", async ({
   page,
 }) => {
-  const failures = watchForFailures(page);
+  const failures = watchForFailures(page, PAYMENT_PROBE);
   const creations = watchCreations(page);
   const email = `smoke-2-4-${Date.now()}@example.com`;
 
@@ -358,7 +318,7 @@ test("Création d’une réservation contre le vrai PMS : code, total au centime
 test("Double soumission contre le vrai stack : une seule réservation créée (idempotence)", async ({
   page,
 }) => {
-  const failures = watchForFailures(page);
+  const failures = watchForFailures(page, PAYMENT_PROBE);
   const email = `smoke-2-4-idem-${Date.now()}@example.com`;
 
   // Séjour distinct du test précédent : sinon sa `Pending` bloquerait réellement cette chambre.
@@ -408,7 +368,7 @@ test("Double soumission contre le vrai stack : une seule réservation créée (i
 test("Réservation d’un autre séjour : divergence détectée contre le vrai PMS", async ({
   page,
 }) => {
-  const failures = watchForFailures(page);
+  const failures = watchForFailures(page, PAYMENT_PROBE);
   const creations = watchCreations(page);
   const email = `smoke-2-4-mismatch-${Date.now()}@example.com`;
 
@@ -470,7 +430,7 @@ test("Réservation d’un autre séjour : divergence détectée contre le vrai P
 test("Demandes spéciales & langue portées jusqu’au vrai PMS et relues", async ({
   page,
 }) => {
-  const failures = watchForFailures(page);
+  const failures = watchForFailures(page, PAYMENT_PROBE);
   const creations = watchCreations(page);
   const stamp = Date.now();
   const email = `smoke-2-5-${stamp}@example.com`;
@@ -564,7 +524,7 @@ test("Demandes spéciales & langue portées jusqu’au vrai PMS et relues", asyn
 test("Upsell de services contre le vrai PMS : catalogue, panier accepté, total combiné", async ({
   page,
 }) => {
-  const failures = watchForFailures(page);
+  const failures = watchForFailures(page, PAYMENT_PROBE);
   const createBodies: Record<string, unknown>[] = [];
   page.on("request", (req) => {
     if (
@@ -642,6 +602,20 @@ test("Upsell de services contre le vrai PMS : catalogue, panier accepté, total 
 });
 
 /**
+ * Scénarios qui dépendent du **vrai Stripe** (mode test) : marqués `@external` (#94, #125 AC-4). Un
+ * échec réseau vers Stripe y est classé « externe » par `scripts/smoke-baseline.mjs` (relancé une
+ * fois, signalé, non bloquant) ; tout autre échec, ou un échec vers le stack local, reste une
+ * régression.
+ */
+const STRIPE_EXTERNAL = {
+  tag: "@external",
+  annotation: {
+    type: "external",
+    description: "Stripe (js.stripe.com, api.stripe.com, mode test)",
+  },
+};
+
+/**
  * Story 3.1 — **autorisation carte réelle** contre le vrai stack et le vrai Stripe (mode test).
  *
  * Ce que ni l'e2e isolé ni les tests d'intégration ne peuvent prouver :
@@ -661,63 +635,65 @@ test("Upsell de services contre le vrai PMS : catalogue, panier accepté, total 
  * ⚠️ Ce test place une vraie autorisation sur une carte de test Stripe. Elle n'est jamais capturée
  * (c'est le périmètre de la story 3.2) et expire d'elle-même sous ~7 jours.
  */
-test("Paiement carte contre le vrai Stripe : autorisation sans capture, sans quitter le tunnel", async ({
-  page,
-}) => {
-  // Budget élargi : ce scénario enchaîne de vrais aller-retours réseau avec Stripe (chargement de
-  // js.stripe.com, montage du Payment Element, confirmation, sonde de statut). Les 30 s par défaut
-  // suffisent aux scénarios qui ne parlent qu'au stack local, pas à celui-ci.
-  test.setTimeout(150_000);
-  const failures = watchForFailures(page);
-  const email = `smoke-pay-${Date.now()}@example.com`;
+test(
+  "Paiement carte contre le vrai Stripe : autorisation sans capture, sans quitter le tunnel",
+  STRIPE_EXTERNAL,
+  async ({ page }) => {
+    // Budget élargi : ce scénario enchaîne de vrais aller-retours réseau avec Stripe (chargement de
+    // js.stripe.com, montage du Payment Element, confirmation, sonde de statut). Les 30 s par défaut
+    // suffisent aux scénarios qui ne parlent qu'au stack local, pas à celui-ci.
+    test.setTimeout(150_000);
+    const failures = watchForFailures(page, PAYMENT_PROBE);
+    const email = `smoke-pay-${Date.now()}@example.com`;
 
-  await goToPayment(page, email, paidStayOffset(0));
+    await goToPayment(page, email, paidStayOffset(0));
 
-  const cta = page.getByTestId("payment-create-cta");
-  await expect(cta).toBeEnabled({ timeout: 20_000 });
-  await cta.click();
+    const cta = page.getByTestId("payment-create-cta");
+    await expect(cta).toBeEnabled({ timeout: 20_000 });
+    await cta.click();
 
-  await expect(page.getByTestId("payment-reservation-code")).toBeVisible({
-    timeout: 20_000,
-  });
+    await expect(page.getByTestId("payment-reservation-code")).toBeVisible({
+      timeout: 20_000,
+    });
 
-  // Le formulaire n'apparaît qu'une fois l'intent obtenu du BFF **et** Stripe.js chargé.
-  const form = page.getByTestId("payment-form");
-  await expect(form).toBeVisible({ timeout: 30_000 });
+    // Le formulaire n'apparaît qu'une fois l'intent obtenu du BFF **et** Stripe.js chargé.
+    const form = page.getByTestId("payment-form");
+    await expect(form).toBeVisible({ timeout: 30_000 });
 
-  // AC-1 : la promesse « aucun débit ferme » est portée par le `captureMethod` renvoyé par le PMS.
-  // Si le PaymentIntent n'était pas en capture manuelle, ce bloc disparaîtrait au lieu de mentir.
-  await expect(page.getByTestId("payment-no-firm-debit")).toBeVisible();
+    // AC-1 : la promesse « aucun débit ferme » est portée par le `captureMethod` renvoyé par le PMS.
+    // Si le PaymentIntent n'était pas en capture manuelle, ce bloc disparaîtrait au lieu de mentir.
+    await expect(page.getByTestId("payment-no-firm-debit")).toBeVisible();
 
-  // Saisie de la carte de test dans l'iframe Stripe. Le Payment Element expose un seul champ
-  // combiné ; on le remplit par saisie clavier plutôt que par sélecteurs internes (instables).
-  await fillTestCard(page);
+    // Saisie de la carte de test dans l'iframe Stripe. Le Payment Element expose un seul champ
+    // combiné ; on le remplit par saisie clavier plutôt que par sélecteurs internes (instables).
+    await fillTestCard(page);
 
-  await page.getByTestId("payment-submit").click();
+    await page.getByTestId("payment-submit").click();
 
-  // AC-3 : l'autorisation aboutit **sur la page** (`redirect: "if_required"`).
-  const authorized = page.getByTestId("payment-authorized");
-  await expect(authorized).toBeVisible({ timeout: 60_000 });
-  await expect(page).toHaveURL(/\/booking\/payment\?/);
+    // AC-3 : l'autorisation aboutit **sur la page** (`redirect: "if_required"`).
+    const authorized = page.getByTestId("payment-authorized");
+    await expect(authorized).toBeVisible({ timeout: 60_000 });
+    await expect(page).toHaveURL(/\/booking\/payment\?/);
 
-  // AC-8 : autorisé n'est PAS confirmé. Aucun code de confirmation, aucun QR, aucun PDF, aucune
-  // promesse d'e-mail — c'est le périmètre de la story 3.2. Défaut réel trouvé en Phase 3 de 2.3.
-  await expect(authorized).not.toContainText(/confirmée|e-?mail|QR|PDF/i);
+    // AC-8 : autorisé n'est PAS confirmé. Aucun code de confirmation, aucun QR, aucun PDF, aucune
+    // promesse d'e-mail — c'est le périmètre de la story 3.2. Défaut réel trouvé en Phase 3 de 2.3.
+    await expect(authorized).not.toContainText(/confirmée|e-?mail|QR|PDF/i);
 
-  // La réservation reste `Pending` : seule la confirmation la fera basculer.
-  await expect(page.getByTestId("payment-reservation-panel")).toHaveAttribute(
-    "data-status",
-    "Pending",
-  );
+    // La réservation reste `Pending` : seule la confirmation la fera basculer.
+    await expect(page.getByTestId("payment-reservation-panel")).toHaveAttribute(
+      "data-status",
+      "Pending",
+    );
 
-  // Le formulaire a disparu : reproposer de payer une carte déjà autorisée serait le chemin du
-  // double débit (AC-6).
-  await expect(page.getByTestId("payment-submit")).toHaveCount(0);
+    // Le formulaire a disparu : reproposer de payer une carte déjà autorisée serait le chemin du
+    // double débit (AC-6).
+    await expect(page.getByTestId("payment-submit")).toHaveCount(0);
 
-  expect(failures, `échecs console/réseau : ${failures.join(" | ")}`).toEqual(
-    [],
-  );
-});
+    expect(failures, `échecs console/réseau : ${failures.join(" | ")}`).toEqual(
+      [],
+    );
+  },
+);
 
 /**
  * Story 3.1 / AC-6 — un rechargement après autorisation ne repropose jamais de payer.
@@ -725,33 +701,35 @@ test("Paiement carte contre le vrai Stripe : autorisation sans capture, sans qui
  * L'écran doit relire l'état réel de l'intent chez Stripe (`requires_capture`) et rendre l'état
  * « autorisé », et non un formulaire vierge. Le PMS, de son côté, refuse d'émettre un second intent.
  */
-test("Rechargement après autorisation : aucune seconde invitation à payer", async ({
-  page,
-}) => {
-  test.setTimeout(150_000);
-  const email = `smoke-pay2-${Date.now()}@example.com`;
+test(
+  "Rechargement après autorisation : aucune seconde invitation à payer",
+  STRIPE_EXTERNAL,
+  async ({ page }) => {
+    test.setTimeout(150_000);
+    const email = `smoke-pay2-${Date.now()}@example.com`;
 
-  await goToPayment(page, email, paidStayOffset(1));
-  await page.getByTestId("payment-create-cta").click();
-  await expect(page.getByTestId("payment-reservation-code")).toBeVisible({
-    timeout: 20_000,
-  });
+    await goToPayment(page, email, paidStayOffset(1));
+    await page.getByTestId("payment-create-cta").click();
+    await expect(page.getByTestId("payment-reservation-code")).toBeVisible({
+      timeout: 20_000,
+    });
 
-  const form = page.getByTestId("payment-form");
-  await expect(form).toBeVisible({ timeout: 30_000 });
+    const form = page.getByTestId("payment-form");
+    await expect(form).toBeVisible({ timeout: 30_000 });
 
-  await fillTestCard(page);
-  await page.getByTestId("payment-submit").click();
+    await fillTestCard(page);
+    await page.getByTestId("payment-submit").click();
 
-  await expect(page.getByTestId("payment-authorized")).toBeVisible({
-    timeout: 60_000,
-  });
+    await expect(page.getByTestId("payment-authorized")).toBeVisible({
+      timeout: 60_000,
+    });
 
-  await page.reload();
+    await page.reload();
 
-  // Après rechargement : toujours autorisé, jamais un nouveau formulaire de paiement.
-  await expect(page.getByTestId("payment-authorized")).toBeVisible({
-    timeout: 30_000,
-  });
-  await expect(page.getByTestId("payment-submit")).toHaveCount(0);
-});
+    // Après rechargement : toujours autorisé, jamais un nouveau formulaire de paiement.
+    await expect(page.getByTestId("payment-authorized")).toBeVisible({
+      timeout: 30_000,
+    });
+    await expect(page.getByTestId("payment-submit")).toHaveCount(0);
+  },
+);

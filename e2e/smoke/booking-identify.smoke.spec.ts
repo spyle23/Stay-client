@@ -1,5 +1,6 @@
 import { test, expect, type Page } from "@playwright/test";
 import AxeBuilder from "@axe-core/playwright";
+import { watchForFailures } from "./helpers/network-probe";
 
 /**
  * Smoke full-stack — identification invité ou compte (Phase 3, périmètre CLIENT, story 2.3).
@@ -31,41 +32,6 @@ function searchUrl(): string {
     currency: "EUR",
   });
   return `/search?${params.toString()}`;
-}
-
-/** Collecte les erreurs **console ET réseau** (AC-13 : « 0 erreur console/réseau »). */
-function watchForFailures(page: Page, expected: number[] = []): string[] {
-  const failures: string[] = [];
-  page.on("console", (msg) => {
-    if (msg.type() !== "error") return;
-    // Chromium journalise TOUTE réponse ≥ 400 en erreur console (« Failed to load resource: …
-    // status of 409 »). Un statut volontairement provoqué par le scénario doit donc être filtré
-    // ici aussi, sinon la surveillance console rendrait le test impossible à écrire.
-    const status = /status of (\d{3})/.exec(msg.text())?.[1];
-    if (status !== undefined && expected.includes(Number(status))) return;
-    failures.push(`console: ${msg.text()}`);
-  });
-  page.on("pageerror", (err) => failures.push(`pageerror: ${err.message}`));
-  page.on("requestfailed", (req) => {
-    failures.push(
-      `requestfailed: ${req.method()} ${req.url()} — ${req.failure()?.errorText ?? "inconnu"}`,
-    );
-  });
-  page.on("response", (res) => {
-    // `expected` recense les statuts volontairement provoqués par un scénario (le 409 de
-    // collision, par exemple) : sans ce paramètre, le test dédié devait renoncer à toute
-    // surveillance console/réseau — et n'en avait donc aucune.
-    if (
-      res.status() >= 400 &&
-      /\/api\/v1\//.test(res.url()) &&
-      !expected.includes(res.status())
-    ) {
-      failures.push(
-        `http ${res.status()}: ${res.request().method()} ${res.url()}`,
-      );
-    }
-  });
-  return failures;
 }
 
 /** Parcours réel jusqu'à l'étape d'identification, en partant de la recherche. */
@@ -181,7 +147,7 @@ test("email déjà connu du PMS : invitation à se connecter, sans doublon ni cu
   page,
 }) => {
   // Le 409 est le résultat **attendu** de ce scénario ; tout autre échec réseau reste surveillé.
-  const failures = watchForFailures(page, [409]);
+  const failures = watchForFailures(page, { expected: [409] });
   const email = `smoke-2-3-dup-${Date.now()}@example.com`;
 
   // 1er passage : le compte est réellement créé côté PMS.

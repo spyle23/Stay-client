@@ -1,5 +1,6 @@
 import { test, expect, type Page } from "@playwright/test";
 import AxeBuilder from "@axe-core/playwright";
+import { watchForFailures } from "./helpers/network-probe";
 
 /**
  * Smoke full-stack — récapitulatif de réservation (Phase 3, périmètre CLIENT, story 2.2). Tourne
@@ -59,33 +60,6 @@ async function breakdownNights(page: Page): Promise<number> {
   const match = /(\d+)\s*(?:nuits?|nights?)/i.exec(text);
   expect(match, `Ventilation illisible: « ${text} »`).not.toBeNull();
   return Number(match?.[1]);
-}
-
-/**
- * Collecte les erreurs **console ET réseau** de la page (AC-12 : « 0 erreur console/réseau »).
- * Un `page.on("console")` seul laisserait passer un appel BFF en échec — précisément la classe de
- * panne que le smoke est censé attraper contre le vrai stack (revue 2.2).
- */
-function watchForFailures(page: Page): string[] {
-  const failures: string[] = [];
-  page.on("console", (msg) => {
-    if (msg.type() === "error") failures.push(`console: ${msg.text()}`);
-  });
-  page.on("pageerror", (err) => failures.push(`pageerror: ${err.message}`));
-  page.on("requestfailed", (req) => {
-    failures.push(
-      `requestfailed: ${req.method()} ${req.url()} — ${req.failure()?.errorText ?? "inconnu"}`,
-    );
-  });
-  page.on("response", (res) => {
-    // Les documents/ressources tierces ne nous concernent pas : on surveille nos propres appels.
-    if (res.status() >= 400 && /\/api\/v1\//.test(res.url())) {
-      failures.push(
-        `http ${res.status()}: ${res.request().method()} ${res.url()}`,
-      );
-    }
-  });
-  return failures;
 }
 
 test("recherche → hôtel → chambre → récapitulatif via le vrai BFF+PMS (total cohérent, politique, recalcul, a11y)", async ({

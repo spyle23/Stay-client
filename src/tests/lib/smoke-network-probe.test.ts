@@ -1,0 +1,194 @@
+import { EventEmitter } from "node:events";
+import type { Page } from "@playwright/test";
+import { describe, expect, it } from "vitest";
+
+import {
+  ABORTED,
+  ignoredRequestFailure,
+  originOf,
+  watchForFailures,
+} from "../../../e2e/smoke/helpers/network-probe";
+
+/**
+ * #125 — sonde réseau partagée du smoke cliente (`e2e/smoke/helpers/network-probe.ts`).
+ * AC-1 : préchargement RSC annulé ignoré, tout autre échec compté ; AC-3 : Stripe.js interrompu ignoré.
+ */
+const FRONT = "http://localhost:3003";
+const RSC = `${FRONT}/hotels/hotel-le-parisien-1a2b?checkInDate=2026-11-08&_rsc=6grVij_EUBxTWnLP`;
+const INTENT = /\/payment\/reservations\/[^/]+\/intent$/;
+
+describe("ignoredRequestFailure", () => {
+  it("AC-1 : ignore un préchargement RSC du front annulé", () => {
+    expect(
+      ignoredRequestFailure({
+        url: RSC,
+        errorText: ABORTED,
+        frontOrigin: FRONT,
+      }),
+    ).toBe("rsc-prefetch");
+  });
+
+  it.each([
+    ["autre code d'erreur", RSC, "net::ERR_CONNECTION_REFUSED", FRONT],
+    [
+      "BFF annulé",
+      "http://localhost:4000/api/v1/booking/quote",
+      ABORTED,
+      FRONT,
+    ],
+    [
+      "PMS annulé",
+      "http://localhost:5231/api/v1/hotels?_rsc=1",
+      ABORTED,
+      FRONT,
+    ],
+    [
+      "ressource du front",
+      `${FRONT}/_next/static/chunks/app.js`,
+      ABORTED,
+      FRONT,
+    ],
+    [
+      "préchargement d'une autre origine",
+      RSC,
+      ABORTED,
+      "http://localhost:3001",
+    ],
+    ["origine du front inconnue", RSC, ABORTED, null],
+    ["`_rsc` hors paramètre de requête", `${FRONT}/_rsc/page`, ABORTED, FRONT],
+  ])(
+    "AC-1 : compte toujours un échec — %s",
+    (_label, url, errorText, frontOrigin) => {
+      expect(ignoredRequestFailure({ url, errorText, frontOrigin })).toBeNull();
+    },
+  );
+
+  it("AC-3 : ignore le chargement interrompu de Stripe.js et de hCaptcha", () => {
+    for (const url of [
+      "https://js.stripe.com/dahlia/stripe.js",
+      "https://newassets.hcaptcha.com/captcha/v1/abc/hcaptcha.js",
+    ]) {
+      expect(
+        ignoredRequestFailure({ url, errorText: ABORTED, frontOrigin: FRONT }),
+      ).toBe("external-host");
+    }
+  });
+
+  it("AC-3 : Stripe en vraie panne (autre code) ou faux sous-domaine restent comptés", () => {
+    expect(
+      ignoredRequestFailure({
+        url: "https://js.stripe.com/dahlia/stripe.js",
+        errorText: "net::ERR_NAME_NOT_RESOLVED",
+        frontOrigin: FRONT,
+      }),
+    ).toBeNull();
+    expect(
+      ignoredRequestFailure({
+        url: "https://evil-js.stripe.com.example.org/x.js",
+        errorText: ABORTED,
+        frontOrigin: FRONT,
+      }),
+    ).toBeNull();
+  });
+
+  it("chemin déclaré par la spec : abandon ignoré seulement sur ce chemin", () => {
+    const url = "http://localhost:4000/api/v1/payment/reservations/r-1/intent";
+    expect(
+      ignoredRequestFailure({
+        url,
+        errorText: ABORTED,
+        frontOrigin: FRONT,
+        abortablePaths: [INTENT],
+      }),
+    ).toBe("aborted-path");
+    expect(
+      ignoredRequestFailure({ url, errorText: ABORTED, frontOrigin: FRONT }),
+    ).toBeNull();
+  });
+
+  it("URL illisible : comptée", () => {
+    expect(
+      ignoredRequestFailure({
+        url: "pas une url",
+        errorText: ABORTED,
+        frontOrigin: FRONT,
+      }),
+    ).toBeNull();
+  });
+});
+
+describe("originOf", () => {
+  it("rend l'origine d'une page, null pour about:blank", () => {
+    expect(originOf(`${FRONT}/search?x=1`)).toBe(FRONT);
+    expect(originOf("about:blank")).toBeNull();
+    expect(originOf("")).toBeNull();
+  });
+});
+
+/** Page factice : juste les événements et l'URL lus par la sonde. */
+function fakePage(url = `${FRONT}/search`) {
+  const emitter = new EventEmitter();
+  const page = Object.assign(emitter, { url: () => url }) as unknown as Page;
+  const failed = (u: string, errorText: string) =>
+    emitter.emit("requestfailed", {
+      url: () => u,
+      method: () => "GET",
+      failure: () => ({ errorText }),
+    });
+  const response = (u: string, status: number) =>
+    emitter.emit("response", {
+      url: () => u,
+      status: () => status,
+      request: () => ({ method: () => "POST" }),
+    });
+  const consoleError = (text: string) =>
+    emitter.emit("console", { type: () => "error", text: () => text });
+  return { page, failed, response, consoleError, emitter };
+}
+
+describe("watchForFailures", () => {
+  it("AC-1/AC-3 : n'enregistre ni le préchargement RSC ni Stripe.js annulés", () => {
+    const { page, failed } = fakePage();
+    const failures = watchForFailures(page);
+    failed(RSC, ABORTED);
+    failed("https://js.stripe.com/dahlia/stripe.js", ABORTED);
+    expect(failures).toEqual([]);
+  });
+
+  it("AC-1 : enregistre un appel BFF interrompu et un préchargement en vraie erreur", () => {
+    const { page, failed } = fakePage();
+    const failures = watchForFailures(page);
+    failed("http://localhost:4000/api/v1/booking/quote", ABORTED);
+    failed(RSC, "net::ERR_FAILED");
+    expect(failures).toEqual([
+      `requestfailed: GET http://localhost:4000/api/v1/booking/quote — ${ABORTED}`,
+      `requestfailed: GET ${RSC} — net::ERR_FAILED`,
+    ]);
+  });
+
+  it("statut attendu filtré (réponse et console), tout autre compté", () => {
+    const { page, response, consoleError, emitter } = fakePage();
+    const failures = watchForFailures(page, { expected: [409] });
+    response("http://localhost:4000/api/v1/auth/guest", 409);
+    consoleError(
+      "Failed to load resource: the server responded with a status of 409 ()",
+    );
+    response("http://localhost:4000/api/v1/auth/guest", 500);
+    response("https://js.stripe.com/v3/m", 500);
+    emitter.emit("pageerror", new Error("boom"));
+    expect(failures).toEqual([
+      "http 500: POST http://localhost:4000/api/v1/auth/guest",
+      "pageerror: boom",
+    ]);
+  });
+
+  it("chemins déclarés transmis à la règle", () => {
+    const { page, failed } = fakePage();
+    const failures = watchForFailures(page, { abortablePaths: [INTENT] });
+    failed(
+      "http://localhost:4000/api/v1/payment/reservations/r-1/intent",
+      ABORTED,
+    );
+    expect(failures).toEqual([]);
+  });
+});
