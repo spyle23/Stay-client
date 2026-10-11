@@ -115,6 +115,7 @@
     "notFoundCta": "Back to home",
     "errorTitle": "Hotel unavailable",
     "errorBody": "We can’t load this hotel right now. Please try again in a few moments.",
+    "errorCta": "Back to home",
     "roomDefault": "Room",
     "roomNumber": "Room {number}",
     "capacity": "{count, plural, one {# guest} other {# guests}}",

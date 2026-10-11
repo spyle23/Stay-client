@@ -17,6 +17,8 @@
 
 # next.js
 /.next/
+# build de production des e2e isoles (playwright.prod.config.ts, spyle23/hotelerie#148)
+/.next-e2e/
 /out/
 
 # production

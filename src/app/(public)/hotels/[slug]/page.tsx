@@ -4,6 +4,7 @@ import { notFound } from "next/navigation";
 import { getTranslations } from "next-intl/server";
 
 import { HotelDetail } from "@/components/organisms/hotel-detail";
+import { HotelUnavailable } from "@/components/organisms/hotel-unavailable";
 import { ApiClientError } from "@/lib/api-client";
 import { isCurrency } from "@/lib/currency";
 import { extractHotelId } from "@/lib/hotel-slug";
@@ -136,7 +137,6 @@ export async function generateMetadata(props: Props): Promise<Metadata> {
  * PMS est momentanément injoignable. `data-hotel-theme` + galerie + chambres + localisation, indexable.
  */
 export default async function HotelPage(props: Props) {
-  const t = await getTranslations("hotel");
   const { id, checkInDate, checkOutDate, guests, currency } =
     await resolveContext(props);
   if (!id) {
@@ -148,20 +148,7 @@ export default async function HotelPage(props: Props) {
     if (result.status === 404) {
       notFound();
     }
-    return (
-      <main className="mx-auto flex w-full max-w-6xl flex-1 flex-col px-4 py-6">
-        <div
-          role="alert"
-          data-testid="hotel-degraded"
-          className="flex flex-col items-center gap-3 rounded-xl bg-card p-8 text-center ring-1 ring-border"
-        >
-          <p className="text-h3 text-foreground">{t("errorTitle")}</p>
-          <p className="max-w-md text-body text-muted-foreground">
-            {t("errorBody")}
-          </p>
-        </div>
-      </main>
-    );
+    return <HotelUnavailable />;
   }
 
   const context: StayContext = { checkInDate, checkOutDate, guests, currency };

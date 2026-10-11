@@ -115,6 +115,7 @@
     "notFoundCta": "Revenir à l’accueil",
     "errorTitle": "Hôtel indisponible",
     "errorBody": "Nous ne pouvons pas charger cet hôtel pour le moment. Réessayez dans quelques instants.",
+    "errorCta": "Revenir à l’accueil",
     "roomDefault": "Chambre",
     "roomNumber": "Chambre {number}",
     "capacity": "{count, plural, one {# voyageur} other {# voyageurs}}",

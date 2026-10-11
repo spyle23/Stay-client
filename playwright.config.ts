@@ -13,6 +13,8 @@ const hasTicketPort = !!process.env.E2E_PORT?.trim();
 // Config e2e front (Story 1.1 — socle e2e). Démarre le dev server puis teste le parcours.
 export default defineConfig({
   testDir: "./src/tests/e2e",
+  // Specs de production (`next start`, #148) : config dédiée `playwright.prod.config.ts`.
+  testIgnore: ["**/prod/**"],
   fullyParallel: true,
   forbidOnly: !!process.env.CI,
   retries: process.env.CI ? 2 : 0,
