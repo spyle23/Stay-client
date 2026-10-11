@@ -12,7 +12,8 @@ import type { Page } from "@playwright/test";
  * - **préchargement RSC** du front (`?_rsc=` sur l'origine de la page) : Next.js précharge les liens
  *   visibles, et une navigation annule les préchargements en cours (front en `next start`, #97) ;
  * - **hôte externe nommé** (`EXTERNAL_ABORTABLE_HOSTS`) : Stripe.js, chargé dès qu'un écran devient
- *   payable, et hCaptcha, chargé par l'iframe Stripe, sont abandonnés quand le test quitte la page ;
+ *   payable, sa télémétrie (`m.stripe.network`, #146) et hCaptcha, chargé par l'iframe Stripe, sont
+ *   abandonnés quand le test quitte la page ;
  * - **chemin déclaré** par la spec (`abortablePaths`), pour un appel qu'elle abandonne volontairement.
  *
  * Tout le reste compte : un autre code d'erreur, un appel au BFF ou au PMS, une ressource du front, un
@@ -23,6 +24,7 @@ export const ABORTED = "net::ERR_ABORTED";
 /** Hôtes tiers (et leurs sous-domaines) dont un chargement interrompu n'est pas un défaut du produit. */
 export const EXTERNAL_ABORTABLE_HOSTS: readonly string[] = [
   "js.stripe.com",
+  "m.stripe.network",
   "hcaptcha.com",
 ];
 

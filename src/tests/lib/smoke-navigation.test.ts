@@ -267,3 +267,79 @@ describe("openHotelCard", () => {
     expect(page.listenerCount("requestfinished")).toBe(0);
   });
 });
+
+// --- openRoomCard (#146) : même synchronisation sur la fiche hôtel, avant le clic sur une chambre ---
+
+describe("openRoomCard", () => {
+  beforeEach(() => {
+    calls.length = 0;
+    annotations.length = 0;
+    vi.useFakeTimers();
+  });
+  afterEach(() => {
+    vi.useRealTimers();
+  });
+
+  class HotelPage extends FakePage {
+    constructor() {
+      super(`${FRONT}/hotels/hotel-le-parisien-1a2b?checkInDate=2027-05-20`);
+    }
+    getByTestId(id: string) {
+      return {
+        nth: (index: number) => ({
+          kind: `${id}#${index}`,
+          click: async () => {
+            calls.push(`click:${id}#${index}`);
+          },
+        }),
+      };
+    }
+  }
+
+  const ROOM_RSC = `${FRONT}/hotels/hotel-le-parisien-1a2b/rooms/019be008?_rsc=MOjT3i60ruUtKnw5`;
+
+  it("attend la chambre, puis le calme des préchargements, clique et exige la fiche chambre", async () => {
+    const { openRoomCard } =
+      await import("../../../e2e/smoke/helpers/navigation");
+    const page = new HotelPage();
+    const prefetch = request(ROOM_RSC);
+
+    const done = track(openRoomCard(page as unknown as Page));
+    await vi.advanceTimersByTimeAsync(0);
+    page.emit("request", prefetch);
+    await vi.advanceTimersByTimeAsync(1_000);
+    expect(calls).toEqual(["visible:room-card-cta#0:20000"]);
+
+    page.emit("requestfinished", prefetch);
+    await vi.advanceTimersByTimeAsync(400);
+    expect(calls).toEqual([
+      "visible:room-card-cta#0:20000",
+      "click:room-card-cta#0",
+      "url:\\/rooms\\/",
+    ]);
+    expect(done.settled).toBe(true);
+    expect(annotations).toEqual([]);
+    expect(page.listenerCount("request")).toBe(0);
+  });
+
+  it("clique quand même à la borne et le signale en annotation", async () => {
+    const { openRoomCard } =
+      await import("../../../e2e/smoke/helpers/navigation");
+    const page = new HotelPage();
+
+    const pending = openRoomCard(page as unknown as Page);
+    await vi.advanceTimersByTimeAsync(0);
+    page.emit("request", request(ROOM_RSC)); // ne se termine jamais
+    await vi.advanceTimersByTimeAsync(10_200);
+    await pending;
+
+    expect(calls).toEqual([
+      "visible:room-card-cta#0:20000",
+      "click:room-card-cta#0",
+      "url:\\/rooms\\/",
+    ]);
+    expect(annotations).toHaveLength(1);
+    expect(annotations[0].type).toBe("rsc-idle");
+    expect(page.listenerCount("requestfailed")).toBe(0);
+  });
+});

@@ -1,7 +1,8 @@
 import { test, expect, type Page } from "@playwright/test";
 import AxeBuilder from "@axe-core/playwright";
 import { watchForFailures, type WatchOptions } from "./helpers/network-probe";
-import { openHotelCard } from "./helpers/navigation";
+import { openHotelCard, openRoomCard } from "./helpers/navigation";
+import { paidStayOffset, uniqueStayOffset } from "./helpers/stay-window";
 
 /**
  * Smoke full-stack — création de la Réservation `Pending` (Phase 3, périmètre CLIENT, story 2.4).
@@ -33,59 +34,14 @@ function futureDate(days: number): string {
 /**
  * ⚠️ Chaque test doit viser des dates **qui lui sont propres**.
  *
- * Ce smoke crée de vraies réservations : la `Pending` du premier test immobilise réellement la
- * chambre (le PMS n'exclut que les `Cancelled` du chevauchement). Deux tests partageant un même
- * séjour se disputeraient donc le même inventaire, et le second se ferait légitimement refuser
- * en « chambre indisponible » — un faux échec qui masquerait ce qu'il est censé prouver.
- *
- * Chaque scénario reçoit donc une **bande de dates propre** via `uniqueStayOffset(slot)` :
- *   slot 0 → création · slot 1 → idempotence · slot 2 → divergence · slot 3 → préférences (2.5).
- *
- * ⚠️ **Une fenêtre fixe rend le test non rejouable pendant toute la durée du hold** (15 min) : la
- * `Pending` du run précédent tient encore la chambre, la recherche ne renvoie plus aucun hôtel
- * disponible, et le test échoue sur une absence de résultat qui n'a rien à voir avec ce qu'il
- * vérifie. Constaté en Phase 3 de la revue 2ᵉ passe. Les scénarios ci-dessus en héritent ; le
- * scénario 2.5 utilise donc `uniqueStayOffset()`, qui décale sa fenêtre à chaque minute.
+ * Ce smoke crée de vraies réservations, sur un jeu de référence à une chambre par hôtel : deux
+ * tests (ou deux passages d'un même test) partageant un séjour se disputeraient le même inventaire,
+ * et le second se ferait légitimement refuser en « chambre indisponible ». Chaque scénario reçoit
+ * donc un séjour propre au passage, par `uniqueStayOffset(slot)` (non payant, change à chaque
+ * seconde) ou `paidStayOffset(slot)` (payant, tiré au hasard dans sa bande) : voir
+ * `helpers/stay-window.ts` (#146).
+ *   slot 0 → création · 1 → idempotence · 2 → divergence · 3 → préférences (2.5) · 4 → upsell (2.6).
  */
-
-/**
- * Décalage de séjour d'un scénario, **propre à ce run**.
- *
- * Chaque `slot` occupe sa propre bande de 39 jours (aucun scénario ne peut recouper un autre), et
- * la fenêtre glisse de 3 jours par minute — soit plus que la durée d'un séjour (2 nuits), donc
- * deux exécutions successives ne se disputent jamais la même chambre.
- *
- * Sans cela, la suite n'était **pas rejouable** pendant toute la durée du hold : la `Pending` du
- * run précédent tenait encore la chambre, la recherche ne renvoyait plus aucun hôtel, et les tests
- * échouaient sur une absence de résultat sans rapport avec ce qu'ils vérifient.
- */
-function uniqueStayOffset(slot: number): number {
-  // ⚠️ Le cycle (20 min) doit rester **supérieur au hold** (15 min par défaut) : avec un cycle plus
-  // court, une fenêtre revenait avant que la `Pending` du tour précédent n'ait été libérée — et le
-  // test échouait à nouveau sur une chambre indisponible. Le pas (3 j) dépasse la durée d'un séjour
-  // (2 nuits), et l'espacement des bandes (70 j) dépasse l'amplitude d'un cycle (60 j).
-  return 60 + slot * 70 + (Math.floor(Date.now() / 60_000) % 20) * 3;
-}
-/**
- * Fenêtre de séjour d'un scénario de **paiement**, neuve à chaque exécution.
- *
- * ⚠️ Ces scénarios-là ne sont pas seulement « non rejouables pendant la durée du hold » : ils sont
- * **définitivement** consommateurs d'inventaire. Dès que l'écran de paiement demande son intent, le
- * BFF pose `paymentStarted` sur le hold — et le balayeur n'annule plus jamais cette `Pending`
- * (FR-14). Tant que la story 3.3 n'a pas livré la libération d'une autorisation abandonnée, chaque
- * exécution immobilise donc une chambre pour de bon sur sa fenêtre.
- *
- * `uniqueStayOffset` (dérivé de la minute courante) ne suffit pas : son cycle de 20 minutes ramène
- * les mêmes dates, sur une chambre qui, elle, ne sera plus jamais rendue. On tire donc une fenêtre
- * au hasard dans une bande large et lointaine, hors de portée des scénarios non payants.
- */
-function paidStayOffset(slot: number): number {
-  // ⚠️ Chaque scénario payant reçoit sa PROPRE bande de 300 jours, disjointe des autres : les deux
-  // s'exécutent en parallèle sur une chambre unique, et un tirage commun les faisait se disputer
-  // l'inventaire environ une exécution sur cinq. La part aléatoire (290 j) sert à ne pas retomber
-  // sur la fenêtre d'une exécution précédente — définitivement consommée, puisque le hold reste gelé.
-  return 700 + slot * 300 + Math.floor(Math.random() * 290);
-}
 
 function searchUrl(startsInDays: number): string {
   const params = new URLSearchParams({
@@ -213,10 +169,10 @@ async function goToPayment(
 ): Promise<void> {
   await page.goto(searchUrl(startsInDays));
   await openHotelCard(page);
-
-  const roomCta = page.getByTestId("room-card-cta").first();
-  await expect(roomCta).toBeVisible({ timeout: 20_000 });
-  await roomCta.click();
+  // Chambre absente : séjour déjà tenu par un passage récent, encore servi par le cache du BFF
+  // (écarté par `uniqueStayOffset`, #146), ou fiche blanche après une navigation RSC annulée
+  // (#148, contournée par `openHotelCard` et `openRoomCard`).
+  await openRoomCard(page);
   await page.getByTestId("room-book-cta").click();
 
   await expect(page.getByTestId("booking-summary")).toBeVisible({
@@ -394,8 +350,9 @@ test("Double soumission contre le vrai stack : une seule réservation créée (i
  * une réservation parfaitement valide ; un faux négatif mettrait deux totaux contradictoires sous
  * les yeux du voyageur juste avant le paiement.
  *
- * ⚠️ Un seul séjour est réellement réservé (J+75). L'URL divergente ne fait que **relire** cette
- * réservation sous un autre nombre de voyageurs : aucune seconde chambre n'est immobilisée.
+ * ⚠️ Un seul séjour est réellement réservé (`uniqueStayOffset(2)`, propre au passage : #146). L'URL
+ * divergente ne fait que **relire** cette réservation sous un autre nombre de voyageurs : aucune
+ * seconde chambre n'est immobilisée.
  */
 test("Réservation d’un autre séjour : divergence détectée contre le vrai PMS", async ({
   page,

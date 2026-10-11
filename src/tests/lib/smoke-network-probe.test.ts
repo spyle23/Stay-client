@@ -74,6 +74,23 @@ describe("ignoredRequestFailure", () => {
     }
   });
 
+  it("#146 : ignore la télémétrie de Stripe.js (m.stripe.network) interrompue en quittant la page", () => {
+    expect(
+      ignoredRequestFailure({
+        url: "https://m.stripe.network/out-4.5.45.js",
+        errorText: ABORTED,
+        frontOrigin: FRONT,
+      }),
+    ).toBe("external-host");
+    expect(
+      ignoredRequestFailure({
+        url: "https://m.stripe.network.example.org/out.js",
+        errorText: ABORTED,
+        frontOrigin: FRONT,
+      }),
+    ).toBeNull();
+  });
+
   it("AC-3 : Stripe en vraie panne (autre code) ou faux sous-domaine restent comptés", () => {
     expect(
       ignoredRequestFailure({
