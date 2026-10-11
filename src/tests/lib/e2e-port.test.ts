@@ -1,4 +1,7 @@
 // @vitest-environment node
+import { readdirSync, readFileSync, statSync } from "node:fs";
+import { join, relative } from "node:path";
+
 import { afterEach, beforeEach, describe, expect, it, vi } from "vitest";
 
 import { DEFAULT_E2E_PORT, resolveE2EPort } from "../../../e2e/web-port";
@@ -74,6 +77,7 @@ describe("playwright.config.ts", () => {
     expect(config.use?.baseURL).toBe("http://localhost:3000");
     expect(ws.url).toBe("http://localhost:3000");
     expect(ws.command).toBe("yarn dev");
+    expect(ws.env?.PORT).toBe("3000");
     expect(ws.reuseExistingServer).toBe(true);
   });
 
@@ -83,5 +87,26 @@ describe("playwright.config.ts", () => {
     const ws = webServerOf(await loadConfig());
 
     expect(ws.reuseExistingServer).toBe(false);
+  });
+});
+
+describe("specs et helpers e2e (AC-3)", () => {
+  // Specs et helpers des e2e isolés ; le smoke Phase 3 (`e2e/smoke`, :3001) est hors périmètre.
+  const E2E_DIR = join(__dirname, "..", "e2e");
+
+  function filesOf(dir: string): string[] {
+    return readdirSync(dir).flatMap((name) => {
+      const path = join(dir, name);
+      return statSync(path).isDirectory() ? filesOf(path) : [path];
+    });
+  }
+
+  it("aucune URL localhost:3000 codée en dur : dériver de baseURL", () => {
+    const files = filesOf(E2E_DIR).filter((f) => /\.(ts|tsx|js|mjs)$/.test(f));
+    expect(files.length).toBeGreaterThan(0);
+    const offenders = files.filter((f) =>
+      /(localhost|127\.0\.0\.1):3000(?!\d)/.test(readFileSync(f, "utf8")),
+    );
+    expect(offenders.map((f) => relative(E2E_DIR, f))).toEqual([]);
   });
 });
