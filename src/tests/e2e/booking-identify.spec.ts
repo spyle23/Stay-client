@@ -306,6 +306,10 @@ test.describe("Identification invité ou compte (isolé, BFF mocké)", () => {
   test("axe : alerte de collision et blocage de séjour, clair + sombre", async ({
     page,
   }) => {
+    // Budget proportionné : cette boucle ouvre quatre écrans (deux états, deux thèmes), chacun
+    // compilé à la demande par le serveur de dev. Avec toute la suite en parallèle, elle dépassait
+    // les 30 s par défaut sans qu'aucune assertion n'échoue (#125, portes).
+    test.slow();
     for (const scheme of ["light", "dark"] as const) {
       await page.emulateMedia({ colorScheme: scheme });
 

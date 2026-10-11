@@ -1015,6 +1015,10 @@ test.describe("Tunnel — accessibilité de l’étape de création", () => {
     test(`axe AA sans violation — thème ${theme}, tous les états clés`, async ({
       page,
     }) => {
+      // Budget proportionné : cette boucle ouvre un écran par état, chacun compilé à la demande par
+      // le serveur de dev. Seule, elle prend ~18 s ; avec toute la suite en parallèle, elle dépassait
+      // les 30 s par défaut sans qu'aucune assertion n'échoue (#125, portes).
+      test.slow();
       await page.emulateMedia({ colorScheme: theme });
 
       for (const name of AUDITED_STATES) {
@@ -1094,6 +1098,10 @@ test.describe("Tunnel — accessibilité de l’étape de création", () => {
    */
   for (const family of ["création", "échec", "réservation"] as const) {
     test(`cibles tactiles ≥ 44 px — écrans « ${family} »`, async ({ page }) => {
+      // Budget proportionné : cette boucle ouvre un écran par état, chacun compilé à la demande par
+      // le serveur de dev. Seule, elle prend ~18 s ; avec toute la suite en parallèle, elle dépassait
+      // les 30 s par défaut sans qu'aucune assertion n'échoue (#125, portes).
+      test.slow();
       // Mobile : c'est là que le critère mord (et que les régressions de 2.2 étaient apparues).
       await page.setViewportSize({ width: 390, height: 844 });
 
