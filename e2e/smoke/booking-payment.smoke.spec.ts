@@ -1,5 +1,6 @@
 import { test, expect, type Page } from "@playwright/test";
 import AxeBuilder from "@axe-core/playwright";
+import { lastMail } from "./helpers/mail";
 import { watchForFailures, type WatchOptions } from "./helpers/network-probe";
 import { openHotelCard, openRoomCard } from "./helpers/navigation";
 import { paidStayOffset, uniqueStayOffset } from "./helpers/stay-window";
@@ -21,7 +22,9 @@ import { paidStayOffset, uniqueStayOffset } from "./helpers/stay-window";
  * - que la réservation relue décrit bien le séjour de l'URL avec les **noms de champs et le format
  *   de date réels** du PMS (une date sérialisée en instant ISO doit rester le même jour civil) ;
  * - l'écran est WCAG 2.1 AA avec de vraies données, en clair et en sombre — y compris sur le
- *   panneau de réservation créée, qui introduit ses propres surfaces.
+ *   panneau de réservation créée, qui introduit ses propres surfaces ;
+ * - l'e-mail « demande de réservation » envoyé par le PMS au voyageur, lu dans le capteur SMTP de
+ *   la Phase 3 (`helpers/mail.ts`, #109).
  */
 const WCAG_TAGS = ["wcag2a", "wcag2aa", "wcag21a", "wcag21aa"];
 
@@ -194,6 +197,9 @@ async function goToPayment(
 test("Création d’une réservation contre le vrai PMS : code, total au centime, hold et reprise", async ({
   page,
 }) => {
+  // Budget élargi (#109) : l'e-mail de demande de réservation passe par la file Hangfire du PMS,
+  // sondée toutes les ~15 s ; `lastMail` l'attend jusqu'à 45 s après les vérifications de l'écran.
+  test.setTimeout(120_000);
   const failures = watchForFailures(page, PAYMENT_PROBE);
   const creations = watchCreations(page);
   const email = `smoke-2-4-${Date.now()}@example.com`;
@@ -297,6 +303,23 @@ test("Création d’une réservation contre le vrai PMS : code, total au centime
   // NFR-8 : le cookie de session reste invisible à JavaScript sur cette étape aussi.
   const visibleCookies = await page.evaluate(() => document.cookie);
   expect(visibleCookies).not.toContain("stay_sid");
+
+  /*
+   * #109 AC-2 : l'e-mail « demande de réservation » du PMS atteint bien le voyageur.
+   *
+   * Le PMS l'inscrit dans son outbox avec la réservation, puis l'envoie par un job Hangfire : il
+   * arrive donc APRÈS la réponse, et `lastMail` sonde le capteur SMTP de la Phase 3 (#99). Seul le
+   * vrai stack prouve la chaîne entière : client provisionné par le BFF avec la bonne adresse,
+   * outbox, job, gabarit rendu. Le code dans le corps relie l'e-mail à CETTE réservation (adresse
+   * propre au passage, aucune écriture en base).
+   */
+  const reservationCode = (await code.innerText()).trim();
+  const confirmation = await lastMail({ to: email });
+  expect(confirmation.to).toContain(email.toLowerCase());
+  expect(confirmation.subject).toMatch(
+    /demande de réservation|booking request/i,
+  );
+  expect(confirmation.text).toContain(reservationCode);
 
   expect(failures, `Erreurs console/réseau: ${failures.join(" | ")}`).toEqual(
     [],
