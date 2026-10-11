@@ -1,6 +1,7 @@
 import { test, expect, type Page } from "@playwright/test";
 import AxeBuilder from "@axe-core/playwright";
 import { watchForFailures } from "./helpers/network-probe";
+import { openHotelCard } from "./helpers/navigation";
 
 /**
  * Smoke full-stack — récapitulatif de réservation (Phase 3, périmètre CLIENT, story 2.2). Tourne
@@ -69,9 +70,7 @@ test("recherche → hôtel → chambre → récapitulatif via le vrai BFF+PMS (t
 
   // Recherche → première fiche hôtel → première chambre disponible.
   await page.goto(searchUrl());
-  const firstCard = page.getByTestId("hotel-card").first();
-  await expect(firstCard).toBeVisible({ timeout: 20_000 });
-  await firstCard.click();
+  await openHotelCard(page);
   await expect(page).toHaveURL(/\/hotels\//);
 
   const roomCta = page.getByTestId("room-card-cta").first();
@@ -154,9 +153,7 @@ test("le séjour est réellement re-tarifé par le BFF, depuis l’éditeur puis
   const failures = watchForFailures(page);
 
   await page.goto(searchUrl());
-  const firstCard = page.getByTestId("hotel-card").first();
-  await expect(firstCard).toBeVisible({ timeout: 20_000 });
-  await firstCard.click();
+  await openHotelCard(page);
   const roomCta = page.getByTestId("room-card-cta").first();
   await expect(roomCta).toBeVisible({ timeout: 20_000 });
   await roomCta.click();

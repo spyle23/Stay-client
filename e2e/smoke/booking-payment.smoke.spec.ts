@@ -1,6 +1,7 @@
 import { test, expect, type Page } from "@playwright/test";
 import AxeBuilder from "@axe-core/playwright";
 import { watchForFailures, type WatchOptions } from "./helpers/network-probe";
+import { openHotelCard } from "./helpers/navigation";
 
 /**
  * Smoke full-stack — création de la Réservation `Pending` (Phase 3, périmètre CLIENT, story 2.4).
@@ -211,9 +212,7 @@ async function goToPayment(
   startsInDays: number,
 ): Promise<void> {
   await page.goto(searchUrl(startsInDays));
-  const firstCard = page.getByTestId("hotel-card").first();
-  await expect(firstCard).toBeVisible({ timeout: 20_000 });
-  await firstCard.click();
+  await openHotelCard(page);
 
   const roomCta = page.getByTestId("room-card-cta").first();
   await expect(roomCta).toBeVisible({ timeout: 20_000 });

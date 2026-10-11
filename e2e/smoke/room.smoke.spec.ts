@@ -1,5 +1,6 @@
 import { test, expect } from "@playwright/test";
 import AxeBuilder from "@axe-core/playwright";
+import { openHotelCard } from "./helpers/navigation";
 
 /**
  * Smoke full-stack — fiche chambre publique (Phase 3, périmètre CLIENT, Story 1.10). Tourne contre
@@ -40,9 +41,7 @@ test("recherche → hôtel → fiche chambre via le vrai BFF+PMS (contenu réel,
 
   // Recherche → première fiche hôtel.
   await page.goto(searchUrl());
-  const firstCard = page.getByTestId("hotel-card").first();
-  await expect(firstCard).toBeVisible({ timeout: 20_000 });
-  await firstCard.click();
+  await openHotelCard(page);
   await expect(page).toHaveURL(/\/hotels\//);
 
   // Le CTA de la RoomCard (câblé en 1.10) est un lien vers la fiche chambre (AC-4).
