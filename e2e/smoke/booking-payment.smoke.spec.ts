@@ -173,8 +173,8 @@ async function goToPayment(
   await page.goto(searchUrl(startsInDays));
   await openHotelCard(page);
   // Chambre absente : séjour déjà tenu par un passage récent, encore servi par le cache du BFF
-  // (écarté par `uniqueStayOffset`, #146), ou fiche blanche après une navigation RSC annulée
-  // (#148, contournée par `openHotelCard` et `openRoomCard`).
+  // (écarté par `uniqueStayOffset`, #146), ou fiche hôtel blanche (course de préchargement
+  // corrigée dans le produit par #148).
   await openRoomCard(page);
   await page.getByTestId("room-book-cta").click();
 

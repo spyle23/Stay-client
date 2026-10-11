@@ -8,9 +8,12 @@ import type { Page } from "@playwright/test";
  * et `booking-recap` non), et le smoke cliente était rouge sur la base pour des requêtes que le
  * navigateur abandonne lui-même.
  *
- * Seul un **abandon** (`net::ERR_ABORTED`) peut être ignoré, et seulement dans trois cas :
- * - **préchargement RSC** du front (`?_rsc=` sur l'origine de la page) : Next.js précharge les liens
- *   visibles, et une navigation annule les préchargements en cours (front en `next start`, #97) ;
+ * Seul un **abandon** (`net::ERR_ABORTED`) peut être ignoré, et seulement dans ces cas :
+ * - **requête RSC du front** (`?_rsc=` sur l'origine de la page), si c'est un **préchargement**
+ *   (en-tête `Next-Router-Prefetch` ou `Next-Router-Segment-Prefetch`) ou si sa **réponse a été
+ *   reçue**. Chromium signale `net::ERR_ABORTED` à la fin normale d'une réponse lue en flux par la
+ *   page (mesuré en `next start`, #148 : statut 200 et corps complet reçus, aucun abandon côté page) ;
+ *   le fetch RSC d'une **navigation** abandonné **sans réponse** reste compté (#77) ;
  * - **hôte externe nommé** (`EXTERNAL_ABORTABLE_HOSTS`) : Stripe.js, chargé dès qu'un écran devient
  *   payable, sa télémétrie (`m.stripe.network`, #146) et hCaptcha, chargé par l'iframe Stripe, sont
  *   abandonnés quand le test quitte la page ;
@@ -28,7 +31,8 @@ export const EXTERNAL_ABORTABLE_HOSTS: readonly string[] = [
   "hcaptcha.com",
 ];
 
-export type IgnoredFailure = "rsc-prefetch" | "external-host" | "aborted-path";
+export type IgnoredFailure =
+  "rsc-prefetch" | "rsc-streamed" | "external-host" | "aborted-path";
 
 export interface RequestFailure {
   /** URL complète de la requête en échec. */
@@ -39,6 +43,18 @@ export interface RequestFailure {
   frontOrigin: string | null;
   /** Chemins (pathname) qu'une spec abandonne volontairement en quittant la page. */
   abortablePaths?: readonly RegExp[];
+  /** Préchargement du routeur Next.js (en-têtes `Next-Router-Prefetch` / `-Segment-Prefetch`). */
+  prefetch?: boolean;
+  /** Une réponse (statut HTTP) a été reçue avant l'échec signalé. */
+  responded?: boolean;
+}
+
+/** Préchargement du routeur Next.js, d'après les en-têtes de la requête. */
+export function isRouterPrefetch(headers: Record<string, string>): boolean {
+  return (
+    headers["next-router-prefetch"] === "1" ||
+    headers["next-router-segment-prefetch"] !== undefined
+  );
 }
 
 function parseUrl(url: string): URL | null {
@@ -66,7 +82,10 @@ export function ignoredRequestFailure(
     url.origin === failure.frontOrigin &&
     url.searchParams.has("_rsc")
   ) {
-    return "rsc-prefetch";
+    if (failure.prefetch) return "rsc-prefetch";
+    // Réponse reçue : fin d'une réponse lue en flux, pas un abandon (#148).
+    if (failure.responded) return "rsc-streamed";
+    return null;
   }
   if (isExternalHost(url.hostname)) return "external-host";
   if (failure.abortablePaths?.some((path) => path.test(url.pathname))) {
@@ -107,15 +126,23 @@ export function watchForFailures(
     failures.push(`console: ${msg.text()}`);
   });
   page.on("pageerror", (err) => failures.push(`pageerror: ${err.message}`));
-  page.on("requestfailed", (req) => {
+  page.on("requestfailed", async (req) => {
     const errorText = req.failure()?.errorText ?? "inconnu";
-    const ignored = ignoredRequestFailure({
+    const failure: RequestFailure = {
       url: req.url(),
       errorText,
       frontOrigin: originOf(page.url()),
       abortablePaths: options.abortablePaths,
-    });
-    if (ignored !== null) return;
+      prefetch: isRouterPrefetch(req.headers()),
+    };
+    if (
+      ignoredRequestFailure(failure) === null &&
+      ignoredRequestFailure({ ...failure, responded: true }) !== null
+    ) {
+      // Seule la réponse peut encore l'innocenter : fetch RSC de navigation (lecture asynchrone).
+      failure.responded = (await req.response().catch(() => null)) !== null;
+    }
+    if (ignoredRequestFailure(failure) !== null) return;
     failures.push(`requestfailed: ${req.method()} ${req.url()} — ${errorText}`);
   });
   page.on("response", (res) => {
