@@ -2,6 +2,7 @@ import { test, expect, type Page } from "@playwright/test";
 import AxeBuilder from "@axe-core/playwright";
 import { watchForFailures } from "./helpers/network-probe";
 import { openHotelCard } from "./helpers/navigation";
+import { awaitGuestQuota } from "./helpers/guest-quota";
 
 /**
  * Smoke full-stack — identification invité ou compte (Phase 3, périmètre CLIENT, story 2.3).
@@ -97,6 +98,7 @@ test("Checkout invité contre le vrai PMS : compte provisionné, session opaque,
   await page.getByTestId("guest-last-name").fill("Rakoto");
   await page.getByTestId("guest-email").fill(email);
   await page.getByTestId("guest-phone").fill("+261340000000");
+  await awaitGuestQuota();
   await page.getByTestId("guest-submit").click();
 
   // AC-1/AC-8 : la session est ouverte et le tunnel continue, contexte préservé.
@@ -146,7 +148,12 @@ test("email déjà connu du PMS : invitation à se connecter, sans doublon ni cu
   page,
 }) => {
   // Le 409 est le résultat **attendu** de ce scénario ; tout autre échec réseau reste surveillé.
-  const failures = watchForFailures(page, { expected: [409] });
+  // Quitter la page de paiement (2ᵉ passage) peut interrompre son chargement du catalogue de
+  // services : abandon volontaire du test, déclaré ici (#148).
+  const failures = watchForFailures(page, {
+    expected: [409],
+    abortablePaths: [/\/booking\/services$/],
+  });
   const email = `smoke-2-3-dup-${Date.now()}@example.com`;
 
   // 1er passage : le compte est réellement créé côté PMS.
@@ -156,10 +163,14 @@ test("email déjà connu du PMS : invitation à se connecter, sans doublon ni cu
   await page.getByTestId("guest-last-name").fill("Rakoto");
   await page.getByTestId("guest-email").fill(email);
   await page.getByTestId("guest-phone").fill("+261340000000");
+  await awaitGuestQuota();
   await page.getByTestId("guest-submit").click();
   await expect(page).toHaveURL(/\/booking\/payment\?/, { timeout: 20_000 });
 
-  // 2ᵉ passage dans un contexte vierge : même email, session repartie de zéro.
+  // 2ᵉ passage dans un contexte vierge : même email, session repartie de zéro. La page de paiement
+  // est d'abord quittée : effacer les cookies sous elle ferait partir ses appels au BFF sans session
+  // (401 sur `booking/services`, #148), un artefact du test et non un défaut du produit.
+  await page.goto("about:blank");
   await page.context().clearCookies();
   await goToIdentify(page);
   await expect(page.getByTestId("guest-form")).toBeVisible({ timeout: 20_000 });
@@ -167,6 +178,7 @@ test("email déjà connu du PMS : invitation à se connecter, sans doublon ni cu
   await page.getByTestId("guest-last-name").fill("Rakoto");
   await page.getByTestId("guest-email").fill(email);
   await page.getByTestId("guest-phone").fill("+261340000000");
+  await awaitGuestQuota();
   await page.getByTestId("guest-submit").click();
 
   // AC-2 : invitation à se connecter, email pré-rempli, aucun second compte créé.
