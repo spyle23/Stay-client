@@ -111,6 +111,8 @@ export function RoomCard({
             hotelName ?? null,
             context,
           )}
+          // Sans préchargement automatique : même course que la carte d'hôtel (#148, #146).
+          prefetch={false}
           className={cn(buttonVariants(), "min-h-(--tap-min) w-full sm:w-auto")}
           data-testid="room-card-cta"
         >

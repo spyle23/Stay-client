@@ -3,6 +3,7 @@ import AxeBuilder from "@axe-core/playwright";
 import { lastMail } from "./helpers/mail";
 import { watchForFailures, type WatchOptions } from "./helpers/network-probe";
 import { openHotelCard, openRoomCard } from "./helpers/navigation";
+import { awaitGuestQuota } from "./helpers/guest-quota";
 import { paidStayOffset, uniqueStayOffset } from "./helpers/stay-window";
 
 /**
@@ -173,8 +174,8 @@ async function goToPayment(
   await page.goto(searchUrl(startsInDays));
   await openHotelCard(page);
   // Chambre absente : séjour déjà tenu par un passage récent, encore servi par le cache du BFF
-  // (écarté par `uniqueStayOffset`, #146), ou fiche blanche après une navigation RSC annulée
-  // (#148, contournée par `openHotelCard` et `openRoomCard`).
+  // (écarté par `uniqueStayOffset`, #146), ou fiche hôtel blanche (course de préchargement
+  // corrigée dans le produit par #148).
   await openRoomCard(page);
   await page.getByTestId("room-book-cta").click();
 
@@ -189,6 +190,7 @@ async function goToPayment(
   await page.getByTestId("guest-last-name").fill("Rakoto");
   await page.getByTestId("guest-email").fill(email);
   await page.getByTestId("guest-phone").fill("+261340000000");
+  await awaitGuestQuota();
   await page.getByTestId("guest-submit").click();
 
   await expect(page).toHaveURL(/\/booking\/payment\?/, { timeout: 20_000 });

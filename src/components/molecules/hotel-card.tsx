@@ -115,6 +115,10 @@ export function HotelCard({
     return (
       <Link
         href={href}
+        // Sans préchargement automatique (#148) : un clic pendant le préchargement « jusqu'au
+        // squelette » de la fiche pouvait la laisser blanche en production. La navigation passe par
+        // une seule requête RSC, diffusée en flux (squelette `loading.tsx`, puis la fiche).
+        prefetch={false}
         data-testid="hotel-card"
         data-hotel-id={hotel.hotelId}
         data-density={density}
