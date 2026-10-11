@@ -171,6 +171,39 @@ async function fillTestCard(page: Page): Promise<void> {
   await target.getByRole("textbox", { name: cvcLabel }).fill("123");
 }
 
+/**
+ * Soumet le paiement par un vrai clic sur « Payer », et vérifie que la soumission est partie (#125).
+ *
+ * ⚠️ Juste après la saisie, le focus est dans l'iframe Stripe (hors origine) et « Payer » est sous la
+ * ligne de flottaison. Le clic de Playwright, émis aussitôt après **son propre** défilement, n'atteint
+ * alors jamais la page : aucun `pointerdown`, aucun `submit`, le formulaire reste `ready`, et le test
+ * attendait 60 s une autorisation jamais demandée (constaté en Phase 3, reproduit au MCP : un second
+ * clic, ou un clic après un défilement stabilisé, aboutit). Ce n'est pas un défaut de l'écran : un
+ * visiteur fait défiler la page lui-même avant de cliquer.
+ *
+ * On fait donc défiler d'abord, on laisse deux images au compositeur, puis on clique ; et l'on exige
+ * que le formulaire quitte `ready`. Un clic perdu est rejoué ; un clic reçu ne l'est jamais (le
+ * formulaire ignore de toute façon un clic pendant la confirmation).
+ */
+async function submitPayment(page: Page): Promise<void> {
+  const submit = page.getByTestId("payment-submit");
+  const stillReady = page.locator(
+    '[data-testid="payment-form"][data-phase="ready"]',
+  );
+  await expect(async () => {
+    if ((await stillReady.count()) === 0) return;
+    await submit.scrollIntoViewIfNeeded();
+    await page.evaluate(
+      () =>
+        new Promise<void>((resolve) =>
+          requestAnimationFrame(() => requestAnimationFrame(() => resolve())),
+        ),
+    );
+    await submit.click({ timeout: 5_000 });
+    await expect(stillReady).toHaveCount(0, { timeout: 3_000 });
+  }).toPass({ timeout: 30_000 });
+}
+
 /** Parcours réel jusqu'à l'étape de paiement, invité provisionné au passage. */
 async function goToPayment(
   page: Page,
@@ -668,7 +701,7 @@ test(
     // combiné ; on le remplit par saisie clavier plutôt que par sélecteurs internes (instables).
     await fillTestCard(page);
 
-    await page.getByTestId("payment-submit").click();
+    await submitPayment(page);
 
     // AC-3 : l'autorisation aboutit **sur la page** (`redirect: "if_required"`).
     const authorized = page.getByTestId("payment-authorized");
@@ -718,7 +751,7 @@ test(
     await expect(form).toBeVisible({ timeout: 30_000 });
 
     await fillTestCard(page);
-    await page.getByTestId("payment-submit").click();
+    await submitPayment(page);
 
     await expect(page.getByTestId("payment-authorized")).toBeVisible({
       timeout: 60_000,
