@@ -32,6 +32,28 @@ describe("design-system: primitives & tokens", () => {
     expect(classes.some((c) => c.startsWith("bg-destructive"))).toBe(true);
   });
 
+  /*
+   * #125 (AC-5) : un bouton ou un lien stylé en bouton qui quitte un état atténué (`opacity-50`
+   * pendant un appel, `disabled:opacity-50`) ne doit pas **fondre** vers l'opacité pleine. Pendant
+   * le fondu, son texte est mélangé au fond : le lien primaire tombait à 4,02:1 (axe, Phase 3).
+   */
+  it.each(["default", "link", "outline", "ghost"] as const)(
+    "Button (%s) n'anime jamais l'opacité",
+    (variant) => {
+      render(<Button variant={variant}>Retour</Button>);
+      const classes = screen
+        .getByRole("button", { name: "Retour" })
+        .className.split(/\s+/);
+      const transitions = classes.filter((c) => c.startsWith("transition"));
+      expect(transitions.length).toBeGreaterThan(0);
+      for (const t of transitions) {
+        expect(t).not.toBe("transition-all");
+        expect(t).not.toBe("transition");
+        expect(t).not.toMatch(/opacity/);
+      }
+    },
+  );
+
   it("Badge rend son contenu", () => {
     render(<Badge>Confirmée</Badge>);
     expect(screen.getByText("Confirmée")).toBeInTheDocument();

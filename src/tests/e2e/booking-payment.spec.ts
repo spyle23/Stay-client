@@ -1015,6 +1015,10 @@ test.describe("Tunnel — accessibilité de l’étape de création", () => {
     test(`axe AA sans violation — thème ${theme}, tous les états clés`, async ({
       page,
     }) => {
+      // Budget proportionné : cette boucle ouvre un écran par état, chacun compilé à la demande par
+      // le serveur de dev. Seule, elle prend ~18 s ; avec toute la suite en parallèle, elle dépassait
+      // les 30 s par défaut sans qu'aucune assertion n'échoue (#125, portes).
+      test.slow();
       await page.emulateMedia({ colorScheme: theme });
 
       for (const name of AUDITED_STATES) {
@@ -1033,12 +1037,71 @@ test.describe("Tunnel — accessibilité de l’étape de création", () => {
   }
 
   /**
+   * #125 (AC-5) : pendant la création, le lien « retour à l'identification » est atténué
+   * (`opacity-50`, `aria-disabled`). Quand la réservation arrive, il doit reprendre son contraste
+   * **aussitôt** : un fondu vers l'opacité pleine le laissait à 4,02:1 (texte primaire mêlé au fond,
+   * < 4,5:1), et l'audit axe du smoke tombait dedans une fois sur deux (« réservée (clair) »).
+   * `axe` ne mesure qu'un instant : on échantillonne donc l'opacité à chaque image, dès que le code
+   * de réservation est rendu.
+   */
+  test("fin de création : le lien de retour reprend son contraste sans fondu", async ({
+    page,
+  }) => {
+    await page.emulateMedia({ colorScheme: "light" });
+    await mockBff(page, { createDelayMs: 400 });
+    await page.goto(paymentUrl());
+    await expect(page.getByTestId("payment-create-cta")).toBeVisible();
+
+    await page.evaluate(() => {
+      const samples: number[] = [];
+      (window as unknown as { __opacity: number[] }).__opacity = samples;
+      const tick = () => {
+        const link = document.querySelector(
+          '[data-testid="payment-back-to-identify"]',
+        );
+        const code = document.querySelector(
+          '[data-testid="payment-reservation-code"]',
+        );
+        if (link !== null && code !== null) {
+          samples.push(Number(getComputedStyle(link).opacity));
+        }
+        if (samples.length < 20) requestAnimationFrame(tick);
+      };
+      requestAnimationFrame(tick);
+    });
+
+    await page.getByTestId("payment-create-cta").click();
+    await expect(page.getByTestId("payment-reservation-code")).toBeVisible();
+    await expect
+      .poll(() =>
+        page.evaluate(
+          () => (window as unknown as { __opacity: number[] }).__opacity.length,
+        ),
+      )
+      .toBeGreaterThanOrEqual(20);
+
+    const samples = await page.evaluate(
+      () => (window as unknown as { __opacity: number[] }).__opacity,
+    );
+    expect(Math.min(...samples), `opacités relevées : ${samples}`).toBe(1);
+
+    const results = await new AxeBuilder({ page })
+      .withTags(WCAG_TAGS)
+      .analyze();
+    expect(results.violations).toEqual([]);
+  });
+
+  /**
    * `axe` ne voit pas les cibles trop petites (WCAG 2.5.5/2.5.8) : 5 régressions à 32 px avaient
    * échappé en revue 2.2. La boucle précédente ne mesurait que 2 interactifs sur 13, et seulement
    * sur l'écran de création — 9 des non couverts vivent sur les écrans d'échec et de hold expiré.
    */
   for (const family of ["création", "échec", "réservation"] as const) {
     test(`cibles tactiles ≥ 44 px — écrans « ${family} »`, async ({ page }) => {
+      // Budget proportionné : cette boucle ouvre un écran par état, chacun compilé à la demande par
+      // le serveur de dev. Seule, elle prend ~18 s ; avec toute la suite en parallèle, elle dépassait
+      // les 30 s par défaut sans qu'aucune assertion n'échoue (#125, portes).
+      test.slow();
       // Mobile : c'est là que le critère mord (et que les régressions de 2.2 étaient apparues).
       await page.setViewportSize({ width: 390, height: 844 });
 
