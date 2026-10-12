@@ -2,7 +2,7 @@ import { test, expect, type Page } from "@playwright/test";
 import AxeBuilder from "@axe-core/playwright";
 import { watchForFailures } from "./helpers/network-probe";
 import { openHotelCard } from "./helpers/navigation";
-import { awaitGuestQuota } from "./helpers/guest-quota";
+import { submitGuestForm } from "./helpers/guest-quota";
 
 /**
  * Smoke full-stack — identification invité ou compte (Phase 3, périmètre CLIENT, story 2.3).
@@ -98,8 +98,7 @@ test("Checkout invité contre le vrai PMS : compte provisionné, session opaque,
   await page.getByTestId("guest-last-name").fill("Rakoto");
   await page.getByTestId("guest-email").fill(email);
   await page.getByTestId("guest-phone").fill("+261340000000");
-  await awaitGuestQuota();
-  await page.getByTestId("guest-submit").click();
+  await submitGuestForm(page);
 
   // AC-1/AC-8 : la session est ouverte et le tunnel continue, contexte préservé.
   await expect(page).toHaveURL(/\/booking\/payment\?/, { timeout: 20_000 });
@@ -163,8 +162,7 @@ test("email déjà connu du PMS : invitation à se connecter, sans doublon ni cu
   await page.getByTestId("guest-last-name").fill("Rakoto");
   await page.getByTestId("guest-email").fill(email);
   await page.getByTestId("guest-phone").fill("+261340000000");
-  await awaitGuestQuota();
-  await page.getByTestId("guest-submit").click();
+  await submitGuestForm(page);
   await expect(page).toHaveURL(/\/booking\/payment\?/, { timeout: 20_000 });
 
   // 2ᵉ passage dans un contexte vierge : même email, session repartie de zéro. La page de paiement
@@ -178,8 +176,7 @@ test("email déjà connu du PMS : invitation à se connecter, sans doublon ni cu
   await page.getByTestId("guest-last-name").fill("Rakoto");
   await page.getByTestId("guest-email").fill(email);
   await page.getByTestId("guest-phone").fill("+261340000000");
-  await awaitGuestQuota();
-  await page.getByTestId("guest-submit").click();
+  await submitGuestForm(page);
 
   // AC-2 : invitation à se connecter, email pré-rempli, aucun second compte créé.
   await expect(page.getByTestId("guest-email-conflict")).toBeVisible({
