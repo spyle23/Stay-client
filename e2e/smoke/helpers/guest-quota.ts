@@ -162,15 +162,23 @@ function stateKey(value: string): string {
   return createHash("sha1").update(value).digest("hex").slice(0, 12);
 }
 
+/** Répertoire des fichiers d'état : celui du système, sauf `SMOKE_GUEST_STATE_DIR` (tests). */
+function stateDir(env: Env): string {
+  return env.SMOKE_GUEST_STATE_DIR || tmpdir();
+}
+
 function stateFile(env: Env): string {
   const front = env.SMOKE_WEB_URL ?? "http://localhost:3001";
-  return join(tmpdir(), `stay-client-smoke-guest-${stateKey(front)}.json`);
+  return join(stateDir(env), `stay-client-smoke-guest-${stateKey(front)}.json`);
 }
 
 /** Relevé du compteur, propre au BFF : tous les fronts (ports) qui l'appellent le partagent. */
 function bffStateFile(env: Env): string {
   const bff = env.SMOKE_BFF_URL ?? DEFAULT_BFF_URL;
-  return join(tmpdir(), `stay-client-smoke-bff-quota-${stateKey(bff)}.json`);
+  return join(
+    stateDir(env),
+    `stay-client-smoke-bff-quota-${stateKey(bff)}.json`,
+  );
 }
 
 function readTimestamps(file: string): number[] {

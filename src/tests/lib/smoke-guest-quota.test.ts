@@ -1,7 +1,7 @@
-import { mkdtempSync } from "node:fs";
+import { mkdtempSync, readdirSync, rmSync } from "node:fs";
 import { tmpdir } from "node:os";
 import { join } from "node:path";
-import { describe, expect, it, vi } from "vitest";
+import { afterAll, describe, expect, it, vi } from "vitest";
 
 const annotations: { type: string; description?: string }[] = [];
 const timeouts: number[] = [];
@@ -33,6 +33,24 @@ import {
  * par IP), comptée entre specs et passages ; on attend avant de soumettre, jamais de rejeu.
  */
 const QUOTA = { limit: 3, windowMs: 60_000, spare: 1 };
+
+/** États isolés par test, dans un répertoire temporaire supprimé à la fin (aucun fichier laissé). */
+const stateDirs: string[] = [];
+
+function isolatedEnv(extra: Record<string, string> = {}) {
+  const dir = mkdtempSync(join(tmpdir(), "stay-client-smoke-quota-test-"));
+  stateDirs.push(dir);
+  return {
+    SMOKE_GUEST_STATE_DIR: dir,
+    SMOKE_WEB_URL: "http://localhost:3001",
+    SMOKE_BFF_URL: "http://localhost:4000",
+    ...extra,
+  };
+}
+
+afterAll(() => {
+  for (const dir of stateDirs) rmSync(dir, { recursive: true, force: true });
+});
 
 describe("resolveGuestQuota", () => {
   it("8 par 61 s par défaut, sous le seuil du BFF (10 par 60 s), 1 place de réserve", () => {
@@ -86,12 +104,10 @@ describe("delayBeforeNextSubmission", () => {
 
 describe("awaitGuestQuota", () => {
   it("enregistre chaque soumission dans un état propre à l'URL du front", async () => {
-    const env = {
-      SMOKE_WEB_URL: `http://localhost:${Date.now() % 50_000}-${mkdtempSync(join(tmpdir(), "q-"))}`,
-      SMOKE_BFF_URL: `http://localhost:2/${Math.random()}`,
+    const env = isolatedEnv({
       SMOKE_GUEST_LIMIT: "2",
       SMOKE_GUEST_WINDOW_MS: "60000",
-    };
+    });
     expect(await awaitGuestQuota(env)).toBe(0);
     expect(await awaitGuestQuota(env)).toBe(0);
     expect(timeouts).toEqual([]);
@@ -101,12 +117,10 @@ describe("awaitGuestQuota", () => {
   it("au-delà du quota, attend en prolongeant le délai du test et le signale", async () => {
     vi.useFakeTimers({ toFake: ["setTimeout", "Date"] });
     try {
-      const env = {
-        SMOKE_WEB_URL: `http://localhost:1/${Math.random()}`,
-        SMOKE_BFF_URL: `http://localhost:2/${Math.random()}`,
+      const env = isolatedEnv({
         SMOKE_GUEST_LIMIT: "1",
         SMOKE_GUEST_WINDOW_MS: "5000",
-      };
+      });
       await awaitGuestQuota(env);
       let done = false;
       const second = awaitGuestQuota(env).then((waited) => {
@@ -221,15 +235,6 @@ describe("delayFromBffQuota", () => {
   });
 });
 
-function isolatedEnv(extra: Record<string, string> = {}) {
-  const dir = mkdtempSync(join(tmpdir(), "q-"));
-  return {
-    SMOKE_WEB_URL: `http://localhost:1/${dir}`,
-    SMOKE_BFF_URL: `http://localhost:2/${dir}`,
-    ...extra,
-  };
-}
-
 describe("recordBffQuota + awaitGuestQuota", () => {
   it("un compteur du BFF épuisé fait attendre, même sous le quota local", async () => {
     vi.useFakeTimers({ toFake: ["setTimeout", "Date"] });
@@ -266,7 +271,7 @@ describe("recordBffQuota + awaitGuestQuota", () => {
         env,
       );
       // Autre front (autre port), même BFF : il attend l'échéance relevée par le premier.
-      const otherFront = { ...env, SMOKE_WEB_URL: `${env.SMOKE_WEB_URL}-3003` };
+      const otherFront = { ...env, SMOKE_WEB_URL: "http://localhost:3003" };
       const pending = awaitGuestQuota(otherFront);
       await vi.advanceTimersByTimeAsync(4_000 + BFF_RESET_MARGIN_MS);
       expect(await pending).toBe(4_000 + BFF_RESET_MARGIN_MS);
@@ -296,6 +301,24 @@ type FakeResponse = {
   headers: () => Record<string, string>;
   request: () => { method: () => string };
 };
+
+describe("fichiers d'état", () => {
+  it("un par front pour les soumissions, un par BFF pour le relevé, dans le répertoire choisi", async () => {
+    const env = isolatedEnv();
+    await awaitGuestQuota(env);
+    recordBffQuota(
+      200,
+      { "x-ratelimit-remaining-ip": "9", "x-ratelimit-reset-ip": "60" },
+      env,
+    );
+    await awaitGuestQuota({ ...env, SMOKE_WEB_URL: "http://localhost:3003" });
+    const files = readdirSync(env.SMOKE_GUEST_STATE_DIR).sort();
+    expect(files).toHaveLength(3);
+    expect(
+      files.filter((f) => f.startsWith("stay-client-smoke-bff-quota-")),
+    ).toHaveLength(1);
+  });
+});
 
 describe("submitGuestForm", () => {
   it("attend le quota, soumet, puis relève le compteur de la réponse du BFF", async () => {
