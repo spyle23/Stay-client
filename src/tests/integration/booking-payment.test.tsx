@@ -149,13 +149,22 @@ function stubFetch(handlers: {
   session?: () => unknown;
   createReservation?: (attempt: number) => unknown;
   getReservation?: (attempt: number) => unknown;
+  /** Catalogue d'upsell (story 2.6). Par défaut : catalogue vide, section tue. */
+  upsell?: (attempt: number) => unknown;
 }) {
   const calls: string[] = [];
   const bodies: unknown[] = [];
   let creations = 0;
   let reads = 0;
+  let upsellReads = 0;
   const fetchMock = vi.fn((url: string, init?: RequestInit) => {
     calls.push(`${init?.method ?? "GET"} ${url}`);
+    if (url.includes("/booking/services")) {
+      return Promise.resolve(
+        handlers.upsell?.(upsellReads++) ??
+          json({ success: true, data: { services: [], degraded: false } }),
+      );
+    }
     if (url.includes("/booking/quote")) {
       return Promise.resolve(
         handlers.quote?.() ?? json({ success: true, data: quote }),
@@ -1736,5 +1745,221 @@ describe("BookingPayment — corrections de la 2ᵉ passe", () => {
     expect(
       screen.queryByTestId("payment-preferences-diverged"),
     ).not.toBeInTheDocument();
+  });
+});
+
+/**
+ * Upsell de services (story 2.6) — revue du livré, spyle23/hotelerie#2.
+ *
+ * Ces tests manquaient au niveau intégration : l'upsell n'était éprouvé qu'en composant isolé et
+ * en e2e. Deux défauts réels en sont sortis — le récapitulatif annonçait la chambre seule comme
+ * « total », et un service devenu indisponible tombait en motif inconnu avec un « Réessayer »
+ * condamné.
+ */
+describe("BookingPayment — upsell de services (story 2.6)", () => {
+  const SPA_ID = "55555555-5555-4555-8555-555555555555";
+  const CATALOG = {
+    success: true,
+    data: {
+      services: [
+        {
+          serviceId: SPA_ID,
+          name: "Spa",
+          description: null,
+          unitPrice: 3000,
+          currency: "EUR",
+          unit: null,
+        },
+      ],
+      degraded: false,
+    },
+  };
+  const ATTACHED_SPA = {
+    lineId: "line-1",
+    serviceId: SPA_ID,
+    name: "Spa",
+    unitPrice: 3000,
+    quantity: 2,
+    lineTotal: 6000,
+    serviceDate: "2999-07-05",
+    status: "Pending" as const,
+  };
+
+  function upsellReads(calls: string[]): number {
+    return calls.filter((c) => c.includes("/booking/services")).length;
+  }
+
+  it("AC-1/AC-5 : propose les services sans en pré-cocher aucun", async () => {
+    stubFetch({ upsell: () => json(CATALOG) });
+    renderPayment();
+
+    expect(
+      await screen.findByTestId(`upsell-toggle-${SPA_ID}`),
+    ).not.toBeChecked();
+  });
+
+  it("AC-3 : le total du récapitulatif inclut les services cochés (total affiché = total débité)", async () => {
+    stubFetch({ upsell: () => json(CATALOG) });
+    renderPayment();
+
+    fireEvent.click(await screen.findByTestId(`upsell-toggle-${SPA_ID}`));
+
+    // 168 € de chambre + 30 € de spa : c'est ce montant que la création opposera au BFF.
+    await waitFor(() =>
+      expect(screen.getByTestId("booking-total")).toHaveTextContent("198"),
+    );
+    expect(screen.getByTestId("booking-services-total")).toHaveTextContent(
+      "30",
+    );
+  });
+
+  it("AC-4 : envoie le panier avec le total combiné, celui que le récapitulatif affiche", async () => {
+    const { bodies } = stubFetch({
+      upsell: () => json(CATALOG),
+      createReservation: () =>
+        json(
+          {
+            success: true,
+            data: reservation({
+              total: 19_800,
+              servicesTotal: 3_000,
+              services: [{ ...ATTACHED_SPA, quantity: 1, lineTotal: 3000 }],
+            }),
+          },
+          201,
+        ),
+    });
+    renderPayment();
+
+    fireEvent.click(await screen.findByTestId(`upsell-toggle-${SPA_ID}`));
+    fireEvent.click(screen.getByTestId("payment-create-cta"));
+
+    await waitFor(() => expect(bodies).toHaveLength(1));
+    expect(bodies[0]).toMatchObject({
+      expectedTotal: 19_800,
+      services: [{ serviceId: SPA_ID, quantity: 1, serviceDate: "2999-07-05" }],
+    });
+  });
+
+  it("AC-5 : omet la clé `services` quand rien n'est coché", async () => {
+    const { bodies } = stubFetch({ upsell: () => json(CATALOG) });
+    renderPayment();
+
+    await screen.findByTestId(`upsell-toggle-${SPA_ID}`);
+    fireEvent.click(screen.getByTestId("payment-create-cta"));
+
+    await waitFor(() => expect(bodies).toHaveLength(1));
+    expect(bodies[0]).not.toHaveProperty("services");
+    expect(bodies[0]).toMatchObject({ expectedTotal: quote.total });
+  });
+
+  it("service devenu indisponible : motif dédié, catalogue relu, panier modifiable", async () => {
+    const { calls } = stubFetch({
+      upsell: () => json(CATALOG),
+      createReservation: () => json(failureBody("service-unavailable"), 409),
+    });
+    renderPayment();
+
+    fireEvent.click(await screen.findByTestId(`upsell-toggle-${SPA_ID}`));
+    fireEvent.click(screen.getByTestId("payment-create-cta"));
+
+    const panel = await screen.findByTestId("payment-failure");
+    expect(panel).toHaveAttribute("data-reason", "service-unavailable");
+    expect(panel).toHaveTextContent(/service n’est plus disponible/i);
+    // Le catalogue est relu : un service retiré par l'hôtel disparaît de la liste proposée.
+    await waitFor(() => expect(upsellReads(calls)).toBe(2));
+
+    // Retirer le service efface l'échec et rend la création possible — pas de cul-de-sac.
+    fireEvent.click(screen.getByTestId(`upsell-toggle-${SPA_ID}`));
+    await waitFor(() =>
+      expect(screen.queryByTestId("payment-failure")).not.toBeInTheDocument(),
+    );
+    expect(screen.getByTestId("payment-create-cta")).toBeEnabled();
+  });
+
+  it("service retiré du catalogue relu : « Réessayer » réserve sans lui, au total chambre seule", async () => {
+    // Cas réel du motif : l'hôtel a retiré le service, le catalogue relu ne le propose plus. Le
+    // voyageur ne peut donc pas le décocher ; le rejeu doit partir sans lui, jamais avec le panier
+    // refusé (boucle infinie de `service-unavailable`).
+    const { bodies } = stubFetch({
+      upsell: (attempt) =>
+        attempt === 0
+          ? json(CATALOG)
+          : json({ success: true, data: { services: [], degraded: false } }),
+      createReservation: (attempt) =>
+        attempt === 0
+          ? json(failureBody("service-unavailable"), 409)
+          : json({ success: true, data: reservation() }, 201),
+    });
+    renderPayment();
+
+    fireEvent.click(await screen.findByTestId(`upsell-toggle-${SPA_ID}`));
+    fireEvent.click(screen.getByTestId("payment-create-cta"));
+
+    const panel = await screen.findByTestId("payment-failure");
+    expect(panel).toHaveAttribute("data-reason", "service-unavailable");
+    await waitFor(() =>
+      expect(
+        screen.queryByTestId(`upsell-toggle-${SPA_ID}`),
+      ).not.toBeInTheDocument(),
+    );
+    // Le récapitulatif ne chiffre plus le service disparu.
+    expect(
+      screen.queryByTestId("booking-services-total"),
+    ).not.toBeInTheDocument();
+
+    fireEvent.click(screen.getByTestId("payment-failure-retry"));
+
+    await waitFor(() => expect(bodies).toHaveLength(2));
+    expect(bodies[1]).not.toHaveProperty("services");
+    expect(bodies[1]).toMatchObject({ expectedTotal: quote.total });
+  });
+
+  it("AC-6 : services attachés en lecture seule, sans aucun contrôle de modification", async () => {
+    stubFetch({
+      getReservation: () =>
+        json({
+          success: true,
+          data: reservation({
+            created: false,
+            total: 22_800,
+            servicesTotal: 6_000,
+            services: [ATTACHED_SPA],
+          }),
+        }),
+    });
+    renderPayment(RESERVATION_ID);
+
+    const attached = await screen.findByTestId("payment-attached-services");
+    expect(attached).toHaveTextContent("Spa × 2");
+    expect(
+      attached.querySelectorAll("input, button, select, textarea, a"),
+    ).toHaveLength(0);
+    // Le gel est DIT, plutôt que suggéré par l'absence de commande.
+    expect(
+      screen.getByTestId("payment-attached-services-locked"),
+    ).toBeVisible();
+  });
+
+  it("le récapitulatif reprend les services réellement attachés après création", async () => {
+    stubFetch({
+      getReservation: () =>
+        json({
+          success: true,
+          data: reservation({
+            created: false,
+            total: 22_800,
+            servicesTotal: 6_000,
+            services: [ATTACHED_SPA],
+          }),
+        }),
+    });
+    renderPayment(RESERVATION_ID);
+
+    await screen.findByTestId("payment-attached-services");
+    expect(screen.getByTestId("booking-total")).toHaveTextContent("228");
+    expect(screen.getByTestId("payment-reservation-total")).toHaveTextContent(
+      "228",
+    );
   });
 });

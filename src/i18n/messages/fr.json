@@ -196,6 +196,7 @@
     "nightsValue": "{count, plural, one {# nuit} other {# nuits}}",
     "totalNights": "Total · {nights}",
     "breakdownRoom": "{price} × {nights}",
+    "servicesLabel": "Services",
     "taxLabel": "Taxes de séjour",
     "taxIncludedUndetailed": "incluses, non détaillées",
     "totalLabel": "Total {currency}",
@@ -327,7 +328,7 @@
       "attachedLine": "{name} × {quantity}",
       "droppedTitle": "Un service a été retiré",
       "droppedNotice": "Un ou plusieurs services ne sont plus disponibles pour votre séjour : ils ont été retirés et votre chambre reste réservée. Le total ci-dessous tient compte de ce retrait.",
-      "lockedNotice": "Votre paiement est engagé : les services ne peuvent plus être modifiés ici."
+      "lockedNotice": "Ces services sont fixés avec votre réservation : ils ne peuvent plus être modifiés ici."
     },
     "announceReservationMismatch": "La réservation de ce lien concerne un autre séjour.",
     "preferencesTitle": "Vos préférences",
@@ -381,6 +382,10 @@
       "unavailable": {
         "title": "Service momentanément indisponible",
         "body": "Nous n’avons pas pu joindre notre service de réservation. Aucune réservation n’a été créée."
+      },
+      "service-unavailable": {
+        "title": "Un service n’est plus disponible",
+        "body": "Un service choisi n’est plus proposé pour votre séjour. Aucune réservation n’a été créée : retirez-le de votre sélection, puis réservez à nouveau."
       },
       "unknown": {
         "title": "La réservation n’a pas abouti",

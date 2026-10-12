@@ -247,9 +247,21 @@ test.describe("Upsell de services (story 2.6)", () => {
     const attached = page.getByTestId("payment-attached-services");
     await expect(attached).toBeVisible();
     await expect(attached).toContainText("Spa");
-    // Aucune commande d'édition : la modification passe par un appel dédié, refusé dès qu'un
-    // paiement est engagé.
-    await expect(attached.getByRole("checkbox")).toHaveCount(0);
+    // AC-6 (#2) : aucune commande d'aucune sorte — le paiement monte avec la réservation et gèle
+    // le panier côté PMS ; un contrôle ici serait inerte.
+    await expect(
+      attached.locator("input, button, select, textarea, a"),
+    ).toHaveCount(0);
+    await expect(
+      page.getByTestId("payment-attached-services-locked"),
+    ).toBeVisible();
+    // Contraste AA des nouvelles surfaces (ligne de services, avis de gel), clair puis sombre.
+    const light = await new AxeBuilder({ page }).withTags(WCAG_TAGS).analyze();
+    expect(light.violations, "services attachés (clair)").toEqual([]);
+    await page.getByTestId("theme-toggle").click();
+    await expect(page.locator("html")).toHaveClass(/(^|\s)dark(\s|$)/);
+    const dark = await new AxeBuilder({ page }).withTags(WCAG_TAGS).analyze();
+    expect(dark.violations, "services attachés (sombre)").toEqual([]);
   });
 
   test("annonce explicitement un service retiré, sans faire échouer la chambre", async ({
@@ -295,5 +307,105 @@ test.describe("Upsell de services (story 2.6)", () => {
       .analyze();
 
     expect(results.violations).toEqual([]);
+  });
+  test("AC-5 : aucune case n’est cochée à l’arrivée, quel que soit le nombre de services", async ({
+    page,
+  }) => {
+    await mockBff(page, {
+      catalog: {
+        services: [
+          ...CATALOG.services,
+          {
+            serviceId: "66666666-6666-4666-8666-666666666666",
+            name: "Parking",
+            description: null,
+            unitPrice: 1500,
+            currency: "EUR",
+            unit: "par nuit",
+          },
+        ],
+        degraded: false,
+      },
+    });
+    await page.goto(paymentUrl());
+
+    const toggles = page.getByTestId("service-upsell").getByRole("checkbox");
+    await expect(toggles).toHaveCount(2);
+    for (const toggle of await toggles.all()) {
+      await expect(toggle).not.toBeChecked();
+    }
+  });
+
+  test("AC-3 (#2) : le total du récapitulatif inclut les services, avant la création", async ({
+    page,
+  }) => {
+    await mockBff(page);
+    await page.goto(paymentUrl());
+
+    const total = page.getByTestId("booking-total");
+    await expect(total).toContainText("168");
+
+    await page.getByTestId(`upsell-toggle-${SPA_ID}`).check();
+    await page.getByTestId(`upsell-quantity-${SPA_ID}`).fill("2");
+
+    // 168 € + 2 × 30 € : le total affiché est celui que la création opposera au BFF.
+    await expect(total).toContainText("228");
+    await expect(page.getByTestId("booking-services-total")).toContainText(
+      "60",
+    );
+  });
+
+  test("service devenu indisponible : motif dédié, puis réservation sans lui", async ({
+    page,
+  }) => {
+    let attempts = 0;
+    let lastBody: Record<string, unknown> = {};
+    await mockBff(page);
+    await page.route(RESERVATIONS_ROUTE, async (route) => {
+      if (route.request().method() !== "POST") {
+        await json(
+          route,
+          reservation({ total: 16800, servicesTotal: 0, services: [] }),
+        );
+        return;
+      }
+      attempts += 1;
+      lastBody = route.request().postDataJSON() as Record<string, unknown>;
+      if (attempts === 1) {
+        await route.fulfill({
+          status: 409,
+          contentType: "application/json",
+          body: JSON.stringify({
+            success: false,
+            message: "Conflit",
+            errors: { reason: ["service-unavailable"] },
+          }),
+        });
+        return;
+      }
+      await json(
+        route,
+        reservation({ total: 16800, servicesTotal: 0, services: [] }),
+        201,
+      );
+    });
+    await page.goto(paymentUrl());
+
+    const toggle = page.getByTestId(`upsell-toggle-${SPA_ID}`);
+    await toggle.check();
+    await page.getByTestId("payment-create-cta").click();
+
+    const failure = page.getByTestId("payment-failure");
+    await expect(failure).toHaveAttribute("data-reason", "service-unavailable");
+    await expect(failure).toContainText("n’est plus disponible");
+
+    // Retirer le service suffit : l'échec part, la création redevient possible.
+    await toggle.uncheck();
+    await expect(failure).toHaveCount(0);
+    await page.getByTestId("payment-create-cta").click();
+
+    await expect(page.getByTestId("payment-reservation-code")).toBeVisible();
+    expect(attempts).toBe(2);
+    expect(lastBody).not.toHaveProperty("services");
   });
 });

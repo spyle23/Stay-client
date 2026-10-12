@@ -34,18 +34,29 @@ import {
  * **Anti drip-pricing** (UX-DR-9.2) : le total affiché ici est celui qui sera débité. Aucun poste
  * n'apparaît plus loin dans le tunnel — la taxe reste un **état** explicite tant que D7 n'est pas
  * livré, jamais une ligne chiffrée inventée.
+ *
+ * **Services ajoutés** (story 2.6, revue #2) : à l'étape paiement, `servicesTotal` porte les
+ * services choisis (ou attachés après création). Ils entrent dans le total affiché : sans eux, le
+ * récapitulatif annonçait la chambre seule comme « total » pendant que la création opposait au BFF
+ * chambre + services — un montant affiché qui n'était pas celui débité.
  */
 export function BookingSummary({
   quote,
   recalculating = false,
+  servicesTotal = 0,
 }: {
   quote: BookingQuoteResult;
   recalculating?: boolean;
+  /** Sous-total des services, en unités mineures de `quote.currency`. `0` sans upsell. */
+  servicesTotal?: number;
 }) {
   const t = useTranslations("booking");
   const locale = useLocale();
   const panelId = useId();
   const [expanded, setExpanded] = useState(false);
+  // Le montant qui engage : chambre (devis du BFF) + services (prix serveur du catalogue). Le BFF
+  // re-tarife le panier à la création et refuse tout total divergent (`price-changed`).
+  const total = quote.total + servicesTotal;
 
   const nightsLabel = t("nightsValue", { count: quote.nights });
   const perNight = formatCurrency(quote.pricePerNight, quote.currency, locale);
@@ -78,7 +89,7 @@ export function BookingSummary({
           <span className="text-h3 font-semibold tabular-nums text-foreground">
             {recalculating
               ? "—"
-              : formatCurrency(quote.total, quote.currency, locale)}
+              : formatCurrency(total, quote.currency, locale)}
           </span>
         </span>
         <span className="inline-flex items-center gap-1 text-small font-medium text-primary">
@@ -195,6 +206,19 @@ export function BookingSummary({
               {formatCurrency(quote.roomTotal, quote.currency, locale)}
             </span>
           </div>
+          {servicesTotal > 0 ? (
+            <div
+              className="flex justify-between gap-3"
+              data-testid="booking-services-total"
+            >
+              <span className="text-muted-foreground">
+                {t("servicesLabel")}
+              </span>
+              <span className="text-foreground">
+                {formatCurrency(servicesTotal, quote.currency, locale)}
+              </span>
+            </div>
+          ) : null}
           {/* D7 non livré : état explicite, jamais un montant de taxe inventé (FR-24, AR-22). */}
           <div className="flex justify-between gap-3">
             <span className="text-muted-foreground">{t("taxLabel")}</span>
@@ -212,7 +236,7 @@ export function BookingSummary({
             {t("totalLabel", { currency: quote.currency })}
           </span>
           <PriceTag
-            amount={quote.total}
+            amount={total}
             currency={quote.currency}
             size="md"
             loading={recalculating}

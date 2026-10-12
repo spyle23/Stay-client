@@ -196,6 +196,7 @@
     "nightsValue": "{count, plural, one {# night} other {# nights}}",
     "totalNights": "Total · {nights}",
     "breakdownRoom": "{price} × {nights}",
+    "servicesLabel": "Services",
     "taxLabel": "Stay tax",
     "taxIncludedUndetailed": "included, not itemised",
     "totalLabel": "Total {currency}",
@@ -327,7 +328,7 @@
       "attachedLine": "{name} × {quantity}",
       "droppedTitle": "A service was removed",
       "droppedNotice": "One or more services are no longer available for your stay: they were removed and your room stays booked. The total below reflects that removal.",
-      "lockedNotice": "Your payment is under way: services can no longer be changed here."
+      "lockedNotice": "These services are set with your booking: they can no longer be changed here."
     },
     "announceReservationMismatch": "The booking on this link is for another stay.",
     "preferencesTitle": "Your preferences",
@@ -381,6 +382,10 @@
       "unavailable": {
         "title": "Service temporarily unavailable",
         "body": "We could not reach our booking service. No booking was created."
+      },
+      "service-unavailable": {
+        "title": "A service is no longer available",
+        "body": "A service you picked is no longer offered for your stay. No booking was created: remove it from your selection, then book again."
       },
       "unknown": {
         "title": "The booking did not go through",

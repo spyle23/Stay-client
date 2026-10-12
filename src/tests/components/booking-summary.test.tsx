@@ -193,3 +193,38 @@ describe("BookingSummary", () => {
     );
   });
 });
+
+/**
+ * Revue de la story 2.6 (spyle23/hotelerie#2) — le total du récapitulatif est le montant débité.
+ *
+ * Avant correctif, l'étape paiement affichait « Total 168 € » pendant que la création opposait au
+ * BFF 228 € (chambre + services) : le récapitulatif annonçait un total que le voyageur ne paierait
+ * pas, à rebours de UX-DR-9.2 et de l'AC-3 de la spec 2.6.
+ */
+describe("BookingSummary — services ajoutés (story 2.6)", () => {
+  afterEach(cleanup);
+
+  it("inclut les services dans le total, mobile et bureau", () => {
+    renderFr(<BookingSummary quote={quote} servicesTotal={6000} />);
+
+    expect(screen.getByTestId("booking-total").textContent).toContain("228");
+    expect(screen.getByTestId("booking-summary-toggle").textContent).toContain(
+      "228",
+    );
+  });
+
+  it("détaille la ligne des services à côté de la chambre", () => {
+    renderFr(<BookingSummary quote={quote} servicesTotal={6000} />);
+
+    const line = screen.getByTestId("booking-services-total");
+    expect(line.textContent).toContain("Services");
+    expect(line.textContent).toContain("60");
+  });
+
+  it("n'ajoute aucune ligne ni aucun montant sans service", () => {
+    renderFr(<BookingSummary quote={quote} servicesTotal={0} />);
+
+    expect(screen.queryByTestId("booking-services-total")).toBeNull();
+    expect(screen.getByTestId("booking-total").textContent).toContain("168");
+  });
+});

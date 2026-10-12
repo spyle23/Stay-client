@@ -193,10 +193,10 @@ export function BookingPayment({
     useState<BookingPreferencesError | null>(null);
 
   /**
-   * Panier d'upsell (story 2.6, FR-11) â **jamais prÃ©-rempli** (opt-in strict, UX-DR-9.7).
+   * Panier d'upsell (story 2.6, FR-11) — **jamais pré-rempli** (opt-in strict, UX-DR-9.7).
    *
-   * LevÃ© ici, comme les prÃ©fÃ©rences : c'est ce qui le fait survivre Ã  un Ã©chec de crÃ©ation
-   * (`price-changed`, 503) sans que le voyageur ait Ã  re-sÃ©lectionner.
+   * Levé ici, comme les préférences : c'est ce qui le fait survivre à un échec de création
+   * (`price-changed`, 503) sans que le voyageur ait à re-sélectionner.
    */
   const [upsellSelection, setUpsellSelection] = useState<UpsellSelection>({});
   const upsellQuery = useUpsellServices(params);
@@ -208,11 +208,11 @@ export function BookingPayment({
   );
 
   /**
-   * Sous-total des services choisis, en unitÃ©s mineures.
+   * Sous-total des services choisis, en unités mineures.
    *
-   * ArithmÃ©tique sur des **prix serveur** (le catalogue vient du BFF) â mÃªme nature de calcul que
-   * `pricePerNight Ã nights`. La vÃ©ritÃ© reste cÃ´tÃ© serveur : le BFF re-tarife le panier au
-   * catalogue Ã  la crÃ©ation et refuse en `price-changed` si le total annoncÃ© diverge.
+   * Arithmétique sur des **prix serveur** (le catalogue vient du BFF) — même nature de calcul que
+   * `pricePerNight × nights`. La vérité reste côté serveur : le BFF re-tarife le panier au
+   * catalogue à la création et refuse en `price-changed` si le total annoncé diverge.
    */
   const upsellTotal = upsellSubtotal(upsellCatalog, upsellSelection);
 
@@ -230,6 +230,19 @@ export function BookingPayment({
   const onPreferencesChange = useCallback((next: BookingPreferences) => {
     setPreferences(next);
     setPreferencesError(null);
+  }, []);
+
+  /**
+   * Changer de panier **périme** un refus `service-unavailable` (revue #2) : il portait sur la
+   * sélection précédente. Sans cela, le CTA restait neutralisé (`failure !== null`) après le
+   * retrait du service fautif — le voyageur avait corrigé, l'écran ne le laissait pas réserver.
+   * Les autres échecs ne dépendent pas du panier et restent affichés.
+   */
+  const onUpsellChange = useCallback((next: UpsellSelection) => {
+    setUpsellSelection(next);
+    setFailure((current) =>
+      current === "service-unavailable" ? null : current,
+    );
   }, []);
 
   const quote = quoteQuery.data;
@@ -316,6 +329,7 @@ export function BookingPayment({
   }, []);
 
   const refetchQuote = quoteQuery.refetch;
+  const refetchUpsell = upsellQuery.refetch;
 
   /**
    * Crée la réservation au montant **explicitement soumis**.
@@ -328,9 +342,9 @@ export function BookingPayment({
   const submit = useCallback(
     async (expected?: SubmittedPrice) => {
       // Story 2.6 / AC-3 : le total soumis couvre chambre ET services. Envoyer le seul total du
-      // devis ferait refuser toute rÃ©servation avec upsell en `price-changed` â le BFF, lui,
+      // devis ferait refuser toute réservation avec upsell en `price-changed` — le BFF, lui,
       // re-tarife le panier au catalogue serveur et compare au grand total.
-      // `expected` (re-confirmation d'un `price-changed`) porte DÃJÃ le grand total renvoyÃ© par le
+      // `expected` (re-confirmation d'un `price-changed`) porte DÉJÀ le grand total renvoyé par le
       // BFF : ne rien y rajouter, sous peine de compter les services deux fois.
       const price =
         expected ??
@@ -367,9 +381,9 @@ export function BookingPayment({
           params,
           expected: price,
           preferences,
-          // La date de service est le premier jour du sÃ©jour : le PMS exige une date dans la
-          // fenÃªtre, et l'Ã©cran ne fait pas choisir de jour (ce serait le pÃ©rimÃ¨tre d'un service
-          // Ã  stock datÃ©).
+          // La date de service est le premier jour du séjour : le PMS exige une date dans la
+          // fenêtre, et l'écran ne fait pas choisir de jour (ce serait le périmètre d'un service
+          // à stock daté).
           services: toUpsellLines(
             upsellCatalog,
             upsellSelection,
@@ -393,6 +407,12 @@ export function BookingPayment({
         if (QUOTE_STALE_REASONS.has(reason)) {
           void refetchQuote();
         }
+        // Un service n'est plus vendable : le catalogue en cache le propose encore. Le relire le
+        // retire de la liste — et de la sélection soumise, `toUpsellLines` ignorant tout service
+        // absent du catalogue (revue #2).
+        if (reason === "service-unavailable") {
+          void refetchUpsell();
+        }
       }
     },
     [
@@ -401,6 +421,7 @@ export function BookingPayment({
       preferences,
       quote,
       refetchQuote,
+      refetchUpsell,
       router,
       upsellCatalog,
       upsellSelection,
@@ -448,6 +469,15 @@ export function BookingPayment({
   });
 
   const pending = create.isPending;
+
+  /**
+   * Services chiffrés par le récapitulatif (revue #2, AC-3 de la spec 2.6) : la sélection en cours
+   * tant que rien n'est créé, puis ce que le PMS a **réellement** attaché — jamais la sélection,
+   * qu'un rejeu idempotent peut contredire. Une réservation d'un autre séjour (`mismatch`) ne
+   * décrit pas le devis affiché : la sélection courante reste alors la référence.
+   */
+  const summaryServicesTotal =
+    reservation !== null && !mismatch ? reservation.servicesTotal : upsellTotal;
   // Le total du devis n'est plus celui que le BFF acceptera : tant que le nouveau tarif n'est pas
   // confirmé, on n'affiche pas deux montants contradictoires avant paiement.
   const priceChangePending = failure === "price-changed" && newPrice !== null;
@@ -739,13 +769,13 @@ export function BookingPayment({
               error={preferencesError}
             />
 
-            {/* Upsell de services (story 2.6, FR-11 / D6) â facultatif. Part dans le MÃME appel
-                que la crÃ©ation : le PMS Ã©crit la chambre et ses services atomiquement. Le
-                composant se rend de lui-mÃªme invisible quand le catalogue est vide ou dÃ©gradÃ©. */}
+            {/* Upsell de services (story 2.6, FR-11 / D6) — facultatif. Part dans le MÊME appel
+                que la création : le PMS écrit la chambre et ses services atomiquement. Le
+                composant se rend de lui-même invisible quand le catalogue est vide ou dégradé. */}
             <ServiceUpsell
               services={upsellCatalog}
               selection={upsellSelection}
-              onChange={setUpsellSelection}
+              onChange={onUpsellChange}
               currency={quote?.currency ?? ""}
               disabled={pending}
             />
@@ -798,7 +828,11 @@ export function BookingPayment({
           data-testid="payment-summary-loading"
         />
       ) : quote ? (
-        <BookingSummary quote={quote} recalculating={summaryStale} />
+        <BookingSummary
+          quote={quote}
+          recalculating={summaryStale}
+          servicesTotal={summaryServicesTotal}
+        />
       ) : (
         <p
           data-testid="payment-summary-unavailable"
@@ -1110,6 +1144,16 @@ function AttachedServices({
           ))}
         </ul>
       )}
+
+      {/* Le gel est DIT plutôt que suggéré par l'absence de commande (spec 2.6, « Gel du panier ») :
+          une fois la réservation créée, le formulaire de paiement monte et engage le paiement —
+          le PMS refuse alors toute modification (`ServicesLockedByPayment`). */}
+      <p
+        className="text-caption text-muted-foreground"
+        data-testid="payment-attached-services-locked"
+      >
+        {t("lockedNotice")}
+      </p>
 
       {dropped.length > 0 ? (
         <div role="status" data-testid="payment-dropped-services">
