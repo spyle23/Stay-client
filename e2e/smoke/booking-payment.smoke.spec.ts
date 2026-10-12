@@ -4,6 +4,7 @@ import { lastMail } from "./helpers/mail";
 import { watchForFailures, type WatchOptions } from "./helpers/network-probe";
 import { openHotelCard, openRoomCard } from "./helpers/navigation";
 import { submitGuestForm } from "./helpers/guest-quota";
+import { displayedMinorUnits } from "./helpers/amount";
 import { paidStayOffset, uniqueStayOffset } from "./helpers/stay-window";
 
 /**
@@ -518,21 +519,28 @@ test("Demandes spéciales & langue portées jusqu’au vrai PMS et relues", asyn
 });
 
 /**
- * Upsell de services contre le vrai stack (story 2.6, FR-11 / dépendance D6).
+ * Upsell de services contre le vrai stack (story 2.6, FR-11 / dépendance D6), rendu **probant** par
+ * la revue du livré (spyle23/hotelerie#2).
  *
  * Ce que seul ce niveau prouve :
  * - que le catalogue servi par `GET /booking/services` vient réellement du PMS, avec le **JWT
  *   `Customer` en custody** — l'e2e isolé mocke le BFF et ne peut pas vérifier l'autorisation ;
+ * - qu'aucun service n'est pré-coché avec de vraies données (opt-in strict, AC-5 de #2) ;
+ * - que le récapitulatif chiffre les services avant la création (total affiché = total débité) ;
  * - que le corps de création portant `services[]` est **accepté** par le PMS (dates de service
  *   ancrées UTC : une date-only y produit un 500) ;
- * - que le **grand total** persisté par le PMS est bien celui affiché avant la création — la
- *   garantie « le total affiché est le total débité » avec de vrais montants et une vraie devise.
+ * - que le **grand total relu** du PMS est exactement celui soumis (`expectedTotal`), services
+ *   compris, et que la ligne de service est réellement attachée à la réservation (AC-4 de #2).
  *
- * ⚠️ **Tolérant à l'absence de service.** Le seed de dev ne garantit aucun `HotelService` actif et
- * `IsExternallyBookable` : sans lui, la section d'upsell ne se rend pas — c'est le comportement
- * correct, pas un échec. Le test valide alors le chemin « sans service » (le corps de création ne
- * doit porter AUCUNE clé `services`) et signale l'absence de données. Pour couvrir le parcours
- * complet, créer un service via le back-office Manager (:3000) avant de rejouer.
+ * ⚠️ **Plus aucun passage silencieux** (#2, AC-3). La base de Phase 3 est l'instantané de référence
+ * du PMS (`stayapi_ref` ou `stayapi_t<N>`) : chaque hôtel qui a une chambre réservable y propose un
+ * « Petit-déjeuner » actif, réservable en ligne et à stock illimité. Le séjour ouvert par
+ * `goToPayment` tombe donc sur un hôtel qui vend au moins un service. Si le catalogue revient vide
+ * ou dégradé, le test **échoue** en le disant : l'ancienne branche « aucun service », qui passait au
+ * vert avec un simple `console.warn`, ne prouvait rien de l'upsell.
+ *
+ * Les montants passent par les unités mineures du BFF et par l'exposant de devise de l'écran
+ * (`helpers/amount.ts` → `lib/currency.ts`), jamais par un `× 100` supposé.
  */
 test("Upsell de services contre le vrai PMS : catalogue, panier accepté, total combiné", async ({
   page,
@@ -548,12 +556,12 @@ test("Upsell de services contre le vrai PMS : catalogue, panier accepté, total 
     }
   });
 
-  // La réponse du catalogue est attendue AVANT toute décision : `count()` ne patiente pas, et
-  // l'appel part au montage de l'étape. Sans cette attente, le test empruntait systématiquement
-  // le chemin « aucun service » — il passait, mais ne prouvait rien de l'upsell.
+  // La réponse du catalogue est attendue AVANT toute décision : l'appel part au montage de l'étape,
+  // et un `count()` immédiat empruntait autrefois le chemin « aucun service » à coup sûr.
   const catalogResponse = page.waitForResponse(
     (res) =>
-      res.url().includes("/api/v1/booking/services") && res.status() === 200,
+      res.url().includes("/api/v1/booking/services") &&
+      res.request().method() === "GET",
     { timeout: 30_000 },
   );
 
@@ -563,56 +571,135 @@ test("Upsell de services contre le vrai PMS : catalogue, panier accepté, total 
     uniqueStayOffset(4),
   );
 
-  await catalogResponse;
+  const catalogRes = await catalogResponse;
+  expect(
+    catalogRes.status(),
+    "GET /booking/services doit répondre 200 au voyageur identifié",
+  ).toBe(200);
+  const catalog = ((await catalogRes.json()) as { data?: UpsellCatalog }).data;
+  expect(
+    catalog?.degraded,
+    "Catalogue d'upsell dégradé : le BFF n'a pas pu lire les services de l'hôtel auprès du PMS.",
+  ).toBe(false);
+  const offered = catalog?.services ?? [];
+  expect(
+    offered.length,
+    `Aucun service vendable sur ${page.url()} : la base de Phase 3 doit proposer, pour l'hôtel ` +
+      "du séjour, au moins un HotelService actif, réservable en ligne et à stock illimité " +
+      "(le « Petit-déjeuner » de l'instantané de référence). Sans lui, ce smoke ne prouve rien.",
+  ).toBeGreaterThan(0);
 
   const upsell = page.getByTestId("service-upsell");
-  const hasServices = (await upsell.count()) > 0;
+  await expect(upsell).toBeVisible();
 
-  if (hasServices) {
-    const toggle = upsell.getByRole("checkbox").first();
-
-    // Opt-in strict, avec de vraies données : rien n'est coché à l'arrivée (UX-DR-9.7).
+  // AC-5 (#2) : opt-in strict avec de vraies données — AUCUNE case cochée à l'arrivée.
+  const toggles = upsell.getByRole("checkbox");
+  await expect(toggles).toHaveCount(offered.length);
+  for (const toggle of await toggles.all()) {
     await expect(toggle).not.toBeChecked();
-    await toggle.check();
-    await expect(page.getByTestId("upsell-subtotal")).not.toContainText(
-      "Aucun service",
-    );
   }
+
+  // Total chambre seule, relu à l'écran AVANT toute sélection.
+  const summaryTotal = page.getByTestId("booking-total");
+  const currency = offered[0].currency;
+  const roomMinor = displayedMinorUnits(
+    await summaryTotal.innerText(),
+    currency,
+  );
+
+  const chosen = offered[0];
+  await page.getByTestId(`upsell-toggle-${chosen.serviceId}`).check();
+
+  // Le récapitulatif chiffre le service dès sa sélection : le total affiché est celui débité.
+  const combined = roomMinor + chosen.unitPrice;
+  await expect
+    .poll(async () =>
+      displayedMinorUnits(await summaryTotal.innerText(), currency),
+    )
+    .toBe(combined);
 
   await page.getByTestId("payment-create-cta").click();
   await expect(page.getByTestId("payment-reservation-code")).toBeVisible({
     timeout: 30_000,
   });
 
+  // AC-4 (#2) : le corps envoyé porte le panier et le total combiné.
   expect(createBodies).toHaveLength(1);
+  const sent = createBodies[0];
+  expect(sent.services).toEqual([
+    {
+      serviceId: chosen.serviceId,
+      quantity: 1,
+      serviceDate: expect.stringMatching(/^\d{4}-\d{2}-\d{2}$/),
+    },
+  ]);
+  const submitted = sent.expectedTotal as number;
+  expect(submitted).toBe(combined);
 
-  if (hasServices) {
-    // Le panier a réellement traversé la frontière jusqu'au PMS.
-    expect(createBodies[0]).toHaveProperty("services");
-    await expect(page.getByTestId("payment-attached-services")).toBeVisible();
-  } else {
-    // Aucun service disponible : le corps doit être byte-pour-byte celui d'avant D6 (AC-9).
-    expect(createBodies[0]).not.toHaveProperty("services");
-    console.warn(
-      "[smoke 2.6] Aucun HotelService actif et vendable dans le seed — parcours d'upsell non couvert.",
-    );
-  }
-
-  // ⚠️ La garantie « total affiché = total débité » se vérifie contre le total **soumis**
-  // (`expectedTotal`, chambre + services), et NON contre `booking-total`, qui reste la chambre
-  // seule : le récapitulatif précède l'étape d'upsell. Comparer au total chambre faisait échouer
-  // le test dès qu'un service était ajouté — pour une divergence qui n'existait pas.
-  const submitted = createBodies[0].expectedTotal as number;
-  const persisted = await page
-    .getByTestId("payment-reservation-total")
-    .innerText();
-  const persistedMinor = Math.round(
-    Number(persisted.replace(/[^\d.,]/g, "").replace(",", ".")) * 100,
+  // Le total PERSISTÉ est relu du PMS (via le BFF) après rechargement, pas pris à l'écho de la
+  // création : c'est lui qui sera débité.
+  await expect(page).toHaveURL(/reservationId=/, { timeout: 20_000 });
+  const readBackResponse = page.waitForResponse(
+    (res) =>
+      res.request().method() === "GET" &&
+      /\/api\/v1\/booking\/reservations\/[0-9a-f-]{36}$/i.test(
+        new URL(res.url()).pathname,
+      ),
+    { timeout: 30_000 },
   );
-  expect(persistedMinor).toBe(submitted);
+  await page.reload();
+  const readBack = await readBackResponse;
+  expect(readBack.status()).toBe(200);
+  const persisted = ((await readBack.json()) as { data: PersistedReservation })
+    .data;
 
-  expect(failures).toEqual([]);
+  expect(persisted.total, "grand total relu = total soumis").toBe(submitted);
+  expect(persisted.servicesTotal).toBe(chosen.unitPrice);
+  expect(persisted.roomTotal).toBe(roomMinor);
+  expect(
+    persisted.services
+      .filter((line) => line.status !== "Cancelled")
+      .map((line) => line.serviceId),
+  ).toEqual([chosen.serviceId]);
+
+  // Et l'écran affiche ce montant, converti par l'exposant de la devise (jamais `× 100`).
+  const shown = page.getByTestId("payment-reservation-total");
+  await expect(shown).toBeVisible({ timeout: 20_000 });
+  expect(displayedMinorUnits(await shown.innerText(), persisted.currency)).toBe(
+    submitted,
+  );
+
+  // AC-6 (#2) : le panier attaché est en lecture seule, sans aucun contrôle de modification.
+  const attached = page.getByTestId("payment-attached-services");
+  await expect(attached).toContainText(chosen.name);
+  await expect(
+    attached.locator("input, button, select, textarea, a"),
+  ).toHaveCount(0);
+
+  expect(failures, `Erreurs console/réseau: ${failures.join(" | ")}`).toEqual(
+    [],
+  );
 });
+
+/** Catalogue d'upsell tel que servi par le BFF (unités mineures, devise de l'hôtel). */
+interface UpsellCatalog {
+  services: {
+    serviceId: string;
+    name: string;
+    unitPrice: number;
+    currency: string;
+  }[];
+  degraded: boolean;
+}
+
+/** Réservation relue par `GET /booking/reservations/:id` — montants en unités mineures. */
+interface PersistedReservation {
+  currency: string;
+  total: number;
+  roomTotal: number;
+  servicesTotal: number;
+  services: { serviceId: string; status: string }[];
+}
 
 /**
  * Scénarios qui dépendent du **vrai Stripe** (mode test) : marqués `@external` (#94, #125 AC-4). Un

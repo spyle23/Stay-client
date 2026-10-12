@@ -222,6 +222,18 @@ describe("fetchReservation", () => {
 });
 
 describe("reservationFailureReason", () => {
+  /**
+   * Story 2.6 (revue #2) : un service devenu indisponible entre le catalogue et la création. Non
+   * reconnu, il tombait en `unknown` et l'écran proposait « Réessayer » — le même panier, refusé à
+   * l'identique, indéfiniment.
+   */
+  it("reconnaît `service-unavailable` posé par le BFF (409)", () => {
+    const error = new ApiClientError("conflit", 409, {
+      reason: ["service-unavailable"],
+    });
+    expect(reservationFailureReason(error)).toBe("service-unavailable");
+  });
+
   it("lit le motif machine posé par le BFF dans `errors.reason`", () => {
     const error = new ApiClientError("conflit", 409, {
       reason: ["room-unavailable"],

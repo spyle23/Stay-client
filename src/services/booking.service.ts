@@ -214,6 +214,11 @@ export type ReservationFailureReason =
   | "room-not-found"
   | "session-invalid"
   | "price-changed"
+  /**
+   * Un service du panier n'est plus vendable (story 2.6). **Pas** déterministe : le voyageur le
+   * retire de sa sélection et réserve à nouveau, le catalogue étant relu entre-temps.
+   */
+  | "service-unavailable"
   /** Refus **déterministe non qualifié** : le BFF y range tout 4xx PMS qu'il n'a pas su classer. */
   | "rejected"
   | "rate-limited"
@@ -261,6 +266,7 @@ const KNOWN_REASONS: readonly ReservationFailureReason[] = [
   "room-not-found",
   "session-invalid",
   "price-changed",
+  "service-unavailable",
   "rejected",
 ];
 
@@ -361,9 +367,8 @@ export function createReservation(
     ...(preferences?.localeTouched
       ? { communicationLocale: preferences.communicationLocale }
       : {}),
-    // Panier d'upsell (story 2.6) : cle OMISE quand il est vide, comme `specialRequests`. Le BFF
-    // distingue Â« pas de panier Â» de Â« panier vide Â», et n'omet la cle vers le PMS que dans le
-    // premier cas.
+    // Panier d'upsell (story 2.6) : clé OMISE quand il est vide, comme `specialRequests`. Le
+    // corps d'une réservation sans service reste ainsi identique à celui d'avant D6 (AC-9).
     ...(services !== undefined && services.length > 0 ? { services } : {}),
   });
 }
