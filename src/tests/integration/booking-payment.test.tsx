@@ -1877,6 +1877,44 @@ describe("BookingPayment — upsell de services (story 2.6)", () => {
     expect(screen.getByTestId("payment-create-cta")).toBeEnabled();
   });
 
+  it("service retiré du catalogue relu : « Réessayer » réserve sans lui, au total chambre seule", async () => {
+    // Cas réel du motif : l'hôtel a retiré le service, le catalogue relu ne le propose plus. Le
+    // voyageur ne peut donc pas le décocher ; le rejeu doit partir sans lui, jamais avec le panier
+    // refusé (boucle infinie de `service-unavailable`).
+    const { bodies } = stubFetch({
+      upsell: (attempt) =>
+        attempt === 0
+          ? json(CATALOG)
+          : json({ success: true, data: { services: [], degraded: false } }),
+      createReservation: (attempt) =>
+        attempt === 0
+          ? json(failureBody("service-unavailable"), 409)
+          : json({ success: true, data: reservation() }, 201),
+    });
+    renderPayment();
+
+    fireEvent.click(await screen.findByTestId(`upsell-toggle-${SPA_ID}`));
+    fireEvent.click(screen.getByTestId("payment-create-cta"));
+
+    const panel = await screen.findByTestId("payment-failure");
+    expect(panel).toHaveAttribute("data-reason", "service-unavailable");
+    await waitFor(() =>
+      expect(
+        screen.queryByTestId(`upsell-toggle-${SPA_ID}`),
+      ).not.toBeInTheDocument(),
+    );
+    // Le récapitulatif ne chiffre plus le service disparu.
+    expect(
+      screen.queryByTestId("booking-services-total"),
+    ).not.toBeInTheDocument();
+
+    fireEvent.click(screen.getByTestId("payment-failure-retry"));
+
+    await waitFor(() => expect(bodies).toHaveLength(2));
+    expect(bodies[1]).not.toHaveProperty("services");
+    expect(bodies[1]).toMatchObject({ expectedTotal: quote.total });
+  });
+
   it("AC-6 : services attachés en lecture seule, sans aucun contrôle de modification", async () => {
     stubFetch({
       getReservation: () =>
