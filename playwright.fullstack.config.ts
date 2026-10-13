@@ -1,5 +1,8 @@
 import { defineConfig, devices } from "@playwright/test";
 
+import { chromiumLaunchOptions } from "./e2e/launch-options";
+import { resolveE2EWorkers } from "./e2e/workers";
+
 /**
  * Config Playwright « full-stack smoke » — Phase 3, périmètre CLIENT (voir CLAUDE.md racine).
  *
@@ -20,12 +23,15 @@ export default defineConfig({
   fullyParallel: false,
   forbidOnly: !!process.env.CI,
   retries: 0,
-  workers: 1,
+  // `E2E_WORKERS` (#178) : jamais au-delà de 1.
+  workers: resolveE2EWorkers(1),
   reporter: [["list"]],
   use: {
     baseURL: WEB_URL,
     trace: "on-first-retry",
     screenshot: "only-on-failure",
+    // Sans GPU (#178) : écran bleu sous la charge des runs parallèles.
+    launchOptions: chromiumLaunchOptions(),
   },
   projects: [{ name: "chromium", use: { ...devices["Desktop Chrome"] } }],
 });
