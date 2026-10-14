@@ -70,8 +70,9 @@ export function uniqueStayOffset(slot: number, nowMs = Date.now()): number {
  * Décalage du séjour d'un scénario de **paiement** (vrai Stripe), neuf à chaque exécution.
  *
  * Ces scénarios consomment l'inventaire pour toute la vie de la base : l'autorisation posée, la
- * `Pending` n'est plus jamais annulée (story 3.3). Chacun reçoit sa propre bande, disjointe de
- * l'autre (ils tournent l'un après l'autre sur la même chambre) et des scénarios non payants. La
+ * `Pending` n'est plus jamais annulée (story 3.3). Chacun reçoit sa propre bande, disjointe des
+ * autres (ils tournent l'un après l'autre sur la même chambre) et des scénarios non payants :
+ * slot 0 → confirmation (3.2) · 1 → rechargement (3.2) · 2 → réconciliation (3.4, #5). La
  * part aléatoire évite de retomber sur la fenêtre d'une exécution précédente.
  */
 export function paidStayOffset(slot: number, random = Math.random): number {
