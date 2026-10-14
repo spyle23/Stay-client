@@ -18,19 +18,23 @@ import type {
   Appearance,
   StripePaymentElementOptions,
 } from "@stripe/stripe-js";
+import Link from "next/link";
 import { useRouter } from "next/navigation";
 import { useLocale, useTranslations } from "next-intl";
 import { useTheme } from "next-themes";
 import { LockIcon } from "lucide-react";
 
-import { Button } from "@/components/ui/button";
+import { Button, buttonVariants } from "@/components/ui/button";
 import { Skeleton } from "@/components/ui/skeleton";
 import { usePaymentIntent } from "@/hooks/use-payment-intent";
 import { isCurrencyExponentReliable } from "@/lib/currency";
 import { getStripe } from "@/lib/stripe";
 import { cn, formatCurrency } from "@/lib/utils";
 import type { ParsedBookingParams } from "@/lib/validations/booking";
-import { buildConfirmationUrl } from "@/services/booking.service";
+import {
+  buildConfirmationUrl,
+  buildRecapUrl,
+} from "@/services/booking.service";
 import {
   paymentFailureReason,
   RETRYABLE_PAYMENT_REASONS,
@@ -69,7 +73,8 @@ type PaymentPhase =
   | "confirming"
   | "3ds"
   | "authorized"
-  | "declined";
+  | "declined"
+  | "expired";
 
 interface BookingPaymentFormProps {
   reservationId: string;
@@ -159,6 +164,7 @@ export function BookingPaymentForm({
     <PayableGate
       intent={intent}
       confirmationUrl={confirmationUrl}
+      params={params}
       expectedTotal={expectedTotal}
       expectedCurrency={expectedCurrency}
     />
@@ -180,17 +186,19 @@ export function BookingPaymentForm({
 function PayableGate({
   intent,
   confirmationUrl,
+  params,
   expectedTotal,
   expectedCurrency,
 }: {
   intent: PaymentIntentResult;
   confirmationUrl: string;
+  params?: ParsedBookingParams;
   expectedTotal: number;
   expectedCurrency: string;
 }) {
   const t = useTranslations("booking.payment");
   const [probed, setProbed] = useState<
-    "pending" | "payable" | "authorized" | "unknown"
+    "pending" | "payable" | "authorized" | "expired" | "unknown"
   >("pending");
 
   useEffect(() => {
@@ -206,7 +214,10 @@ function PayableGate({
         setProbed(
           status === "requires_capture" || status === "succeeded"
             ? "authorized"
-            : "payable",
+            : // #4 AC-2 : intent annulé (fenêtre de paiement écoulée) — rien à payer, rien retenu.
+              status === "canceled"
+              ? "expired"
+              : "payable",
         );
       })
       .catch(() => {
@@ -249,6 +260,10 @@ function PayableGate({
     );
   }
 
+  if (probed === "expired") {
+    return <PaymentExpired params={params} />;
+  }
+
   if (probed === "unknown") {
     return (
       <PaymentNotice
@@ -266,6 +281,7 @@ function PayableGate({
       <PaymentFormInner
         intent={intent}
         confirmationUrl={confirmationUrl}
+        params={params}
         expectedTotal={expectedTotal}
         expectedCurrency={expectedCurrency}
       />
@@ -360,11 +376,13 @@ function StripeBoundary({
 function PaymentFormInner({
   intent,
   confirmationUrl,
+  params,
   expectedTotal,
   expectedCurrency,
 }: {
   intent: PaymentIntentResult;
   confirmationUrl: string;
+  params?: ParsedBookingParams;
   expectedTotal: number;
   expectedCurrency: string;
 }) {
@@ -424,6 +442,10 @@ function PaymentFormInner({
               setPhase("declined");
               setMessage(t("errors.rejected.body"));
               break;
+            case "canceled":
+              // #4 AC-2 : fenêtre de paiement écoulée, réservation et intent annulés.
+              setPhase("expired");
+              break;
             default:
               break;
           }
@@ -463,6 +485,13 @@ function PaymentFormInner({
       });
 
       if (error) {
+        if (isCanceledIntentError(error)) {
+          // #4 AC-2 : soumission tardive — le balayeur a annulé la réservation et le PMS l'intent.
+          // Le message technique de Stripe n'est pas l'issue : l'écran dit qu'aucun débit n'a été
+          // conservé et propose de recommencer.
+          setPhase("expired");
+          return;
+        }
         setPhase("declined");
         // Message de Stripe : il est localisé et décrit précisément le refus (carte expirée, fonds
         // insuffisants…). Le remplacer par un texte générique appauvrirait le diagnostic.
@@ -486,6 +515,9 @@ function PaymentFormInner({
           break;
         case "processing":
           setPhase("confirming");
+          break;
+        case "canceled":
+          setPhase("expired");
           break;
         default:
           setPhase("declined");
@@ -560,6 +592,10 @@ function PaymentFormInner({
         </span>
       </div>
     );
+  }
+
+  if (phase === "expired") {
+    return <PaymentExpired params={params} />;
   }
 
   if (phase === "authorized") {
@@ -679,6 +715,71 @@ function PaymentFormInner({
       ) : null}
     </form>
   );
+}
+
+/**
+ * Délai de paiement dépassé (#4, AC-2, AC-8) : la réservation a été annulée par le balayeur et son
+ * intent par le PMS. Le statut de débit est énoncé (« aucun débit conservé ») et deux issues sont
+ * proposées : recommencer depuis le récapitulatif (nouvelle réservation), ou l'accueil.
+ */
+function PaymentExpired({ params }: { params?: ParsedBookingParams }) {
+  const t = useTranslations("booking.payment");
+  const ref = useRef<HTMLDivElement | null>(null);
+
+  // L'issue change le contenu : le focus suit, pour qu'au clavier elle ne se découvre pas en
+  // explorant la page.
+  useEffect(() => {
+    ref.current?.focus();
+  }, []);
+
+  return (
+    <div
+      ref={ref}
+      tabIndex={-1}
+      role="alert"
+      data-testid="payment-expired"
+      className="flex flex-col items-start gap-3 rounded-lg bg-warning-soft p-4 text-warning outline-none focus-visible:ring-2 focus-visible:ring-ring"
+    >
+      <p className="text-body font-medium">
+        {t("errors.payment-expired.title")}
+      </p>
+      <p className="text-small">{t("errors.payment-expired.body")}</p>
+      <div className="flex flex-wrap gap-2">
+        {params ? (
+          <Link
+            href={buildRecapUrl(params)}
+            className={cn(
+              buttonVariants({ variant: "outline" }),
+              "min-h-(--tap-min)",
+            )}
+            data-testid="payment-expired-restart"
+          >
+            {t("restartCta")}
+          </Link>
+        ) : null}
+        <Link
+          href="/"
+          className={cn(
+            buttonVariants({ variant: "outline" }),
+            "min-h-(--tap-min)",
+          )}
+          data-testid="payment-expired-home"
+        >
+          {t("homeCta")}
+        </Link>
+      </div>
+    </div>
+  );
+}
+
+/**
+ * Erreur Stripe d'une confirmation sur un intent **annulé** (#4, AC-2) : `payment_intent` porte son
+ * statut. Tout autre refus (carte refusée, authentification échouée) reste un refus ordinaire.
+ */
+function isCanceledIntentError(error: {
+  payment_intent?: { status?: string } | null;
+}): boolean {
+  return error.payment_intent?.status === "canceled";
 }
 
 /** Bandeau d'état réutilisé par les échecs de demande d'intent. */

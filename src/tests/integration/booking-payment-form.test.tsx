@@ -524,4 +524,101 @@ describe("BookingPaymentForm", () => {
       expect(submit.getAttribute("aria-describedby")).toContain(error.id);
     });
   });
+
+  /**
+   * #4 (story 3.3) AC-2 — formulaire abandonné au-delà de la fenêtre de paiement : le balayeur a
+   * annulé la réservation et le PMS l'intent chez Stripe. Une soumission tardive échoue, et l'écran
+   * dit qu'aucun débit n'a été conservé, avec une issue (jamais un cul-de-sac).
+   */
+  describe("#4 AC-2 — délai de paiement dépassé", () => {
+    const params = {
+      hotelId: "3fa85f64-5717-4562-b3fc-2c963f66afa6",
+      roomId: "22222222-2222-4222-8222-222222222222",
+      checkInDate: "2099-09-01",
+      checkOutDate: "2099-09-03",
+      guests: 2,
+      currency: "EUR" as const,
+    };
+
+    const renderWithParams = () =>
+      renderForm(
+        <BookingPaymentForm
+          reservationId={RESERVATION_ID}
+          params={params}
+          expectedTotal={16_800}
+          expectedCurrency="EUR"
+        />,
+      );
+
+    it("soumission tardive sur un intent annulé : « aucun débit », recommencer ou accueil", async () => {
+      confirmPayment.mockResolvedValue({
+        error: {
+          type: "invalid_request_error",
+          code: "payment_intent_unexpected_state",
+          message: "This PaymentIntent's status is canceled.",
+          payment_intent: { status: "canceled" },
+        },
+      });
+      renderWithParams();
+      await waitFor(() =>
+        expect(screen.getByTestId("payment-form")).toBeInTheDocument(),
+      );
+
+      fireEvent.submit(screen.getByTestId("payment-form"));
+
+      const notice = await screen.findByTestId("payment-expired");
+      expect(notice).toHaveAttribute("role", "alert");
+      expect(notice).toHaveTextContent("Délai de paiement dépassé");
+      expect(notice).toHaveTextContent(/Aucun débit n'a été conservé/);
+      // Le message technique de Stripe n'est pas l'issue : le formulaire disparaît.
+      expect(screen.queryByTestId("payment-form")).toBeNull();
+      expect(screen.getByTestId("payment-expired-restart")).toHaveAttribute(
+        "href",
+        expect.stringContaining("/booking/recap?"),
+      );
+      expect(screen.getByTestId("payment-expired-home")).toHaveAttribute(
+        "href",
+        "/",
+      );
+      // Jamais de navigation vers la confirmation.
+      expect(routerReplace).not.toHaveBeenCalled();
+    });
+
+    it("un refus de carte ordinaire reste un refus (le formulaire reste, resoumission possible)", async () => {
+      confirmPayment.mockResolvedValue({
+        error: { type: "card_error", message: "Votre carte a été refusée." },
+      });
+      renderWithParams();
+      await waitFor(() =>
+        expect(screen.getByTestId("payment-form")).toBeInTheDocument(),
+      );
+
+      fireEvent.submit(screen.getByTestId("payment-form"));
+
+      expect(await screen.findByTestId("payment-error")).toBeVisible();
+      expect(screen.queryByTestId("payment-expired")).toBeNull();
+    });
+
+    it("rechargement sur un intent déjà annulé : l'écran le dit au lieu de monter un formulaire mort", async () => {
+      retrievePaymentIntent.mockResolvedValue({
+        paymentIntent: { status: "canceled" },
+      });
+      renderWithParams();
+
+      const notice = await screen.findByTestId("payment-expired");
+      expect(notice).toHaveTextContent(/Aucun débit n'a été conservé/);
+      expect(screen.queryByTestId("stripe-payment-element")).toBeNull();
+    });
+
+    it("sans contexte de séjour : l'accueil reste l'issue", async () => {
+      retrievePaymentIntent.mockResolvedValue({
+        paymentIntent: { status: "canceled" },
+      });
+      renderForm();
+
+      await screen.findByTestId("payment-expired");
+      expect(screen.queryByTestId("payment-expired-restart")).toBeNull();
+      expect(screen.getByTestId("payment-expired-home")).toBeVisible();
+    });
+  });
 });

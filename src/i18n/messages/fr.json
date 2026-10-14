@@ -462,8 +462,14 @@
         "probe-failed": {
           "title": "État du paiement indéterminé",
           "body": "Nous n'avons pas pu vérifier l'état de votre paiement. Rechargez la page pour éviter tout risque de double débit."
+        },
+        "payment-expired": {
+          "title": "Délai de paiement dépassé",
+          "body": "Le temps imparti pour payer cette réservation est écoulé : elle a été annulée et la chambre libérée. Aucun débit n'a été conservé."
         }
-      }
+      },
+      "restartCta": "Recommencer ma réservation",
+      "homeCta": "Retour à l'accueil"
     },
     "confirmation": {
       "metaTitle": "Confirmation de votre réservation",
@@ -547,8 +553,17 @@
         "unknown": {
           "title": "Confirmation interrompue",
           "body": "Une erreur inattendue a interrompu la confirmation. Réessayez dans un instant."
+        },
+        "room-unavailable": {
+          "title": "Chambre plus disponible",
+          "body": "Cette chambre vient d'être réservée pour vos dates : votre réservation n'a pas pu être confirmée. D'autres chambres de l'hôtel sont peut-être libres pour le même séjour."
         }
-      }
+      },
+      "refundIssued": "Remboursement intégral émis : la somme prélevée vous est restituée en totalité. Selon votre banque, elle réapparaît sur votre compte sous quelques jours.",
+      "debitCaptured": "Un montant a été encaissé alors que cette réservation n'est pas confirmée. Contactez l'hôtel pour en obtenir le remboursement.",
+      "debitHeld": "Un montant reste réservé sur votre carte, sans être encaissé : sa libération n'a pas encore abouti. Évitez de payer une seconde fois en attendant.",
+      "debitUnknown": "L'état de votre paiement n'a pas encore pu être vérifié. Avant de payer à nouveau, consultez vos réservations ; si un montant a été prélevé sans réservation confirmée, contactez l'hôtel.",
+      "alternativesCta": "Voir les chambres disponibles"
     },
     "reservationSettledProofCta": "Voir la confirmation de ma réservation"
   }

@@ -184,11 +184,69 @@ export type ConfirmFailureReason =
   | "authorisation-expired"
   | "reservation-not-found"
   | "reservation-cancelled"
+  | "room-unavailable"
   | "not-owner"
   | "session-invalid"
   | "rejected"
   | "unavailable"
   | "unknown";
+
+/**
+ * Statut de débit d'un échec de confirmation (#4, AC-8), lu par le BFF au PMS (`errors.debit`) :
+ * `none` (aucun débit conservé), `refunded` (remboursement intégral émis), `captured` (montant
+ * encaissé sans réservation confirmée ni remboursement), `held` (autorisation encore posée sur la
+ * carte, non encaissée : Stripe n'a pas pu l'annuler). `null` quand le BFF ne l'a pas établi.
+ */
+export type ConfirmDebitStatus = "none" | "refunded" | "captured" | "held";
+
+/** Énoncé de débit affiché : un statut établi, ou `unknown` quand rien ne l'établit (#4). */
+export type ConfirmDebitStatement = ConfirmDebitStatus | "unknown";
+
+const KNOWN_DEBITS: ReadonlySet<string> = new Set<ConfirmDebitStatus>([
+  "none",
+  "refunded",
+  "captured",
+  "held",
+]);
+
+/**
+ * Motifs qui établissent **par construction** qu'aucun débit n'a été conservé : aucun paiement
+ * autorisé, montant refusé avant capture, capture non aboutie, autorisation expirée. Tout autre
+ * motif sans statut du BFF (panne, chambre prise, annulée…) ne prouve rien (revue #4, ronde 1).
+ */
+const NO_DEBIT_BY_CONSTRUCTION: ReadonlySet<ConfirmFailureReason> =
+  new Set<ConfirmFailureReason>([
+    "payment-not-authorized",
+    "amount-mismatch",
+    "capture-failed",
+    "authorisation-expired",
+  ]);
+
+/**
+ * Énoncé de débit d'un échec de confirmation (#4, AC-8) : le statut établi par le BFF fait foi ; à
+ * défaut, « aucun débit » pour les seuls motifs qui le prouvent, sinon `unknown`. L'absence
+ * d'information n'est JAMAIS « aucun débit ».
+ */
+export function confirmDebitStatement(
+  reason: ConfirmFailureReason,
+  debit: ConfirmDebitStatus | null,
+): ConfirmDebitStatement {
+  if (debit !== null) {
+    return debit;
+  }
+  return NO_DEBIT_BY_CONSTRUCTION.has(reason) ? "none" : "unknown";
+}
+
+/** Statut de débit porté par un échec de confirmation, ou `null` s'il est absent ou inconnu. */
+export function confirmFailureDebit(error: unknown): ConfirmDebitStatus | null {
+  if (!(error instanceof ApiClientError)) {
+    return null;
+  }
+  const debit = error.errors?.debit?.[0];
+  return debit && KNOWN_DEBITS.has(debit)
+    ? (debit as ConfirmDebitStatus)
+    : null;
+}
 
 /**
  * Confirme la réservation et rend la preuve. Idempotent côté BFF et PMS : un rejeu (rechargement,
@@ -211,6 +269,7 @@ const KNOWN_CONFIRM_REASONS: ReadonlySet<string> =
     "authorisation-expired",
     "reservation-not-found",
     "reservation-cancelled",
+    "room-unavailable",
     "not-owner",
     "session-invalid",
     "rejected",

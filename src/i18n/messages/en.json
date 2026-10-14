@@ -462,8 +462,14 @@
         "probe-failed": {
           "title": "Payment status unknown",
           "body": "We could not check your payment status. Reload the page to avoid any risk of a double charge."
+        },
+        "payment-expired": {
+          "title": "Payment time limit exceeded",
+          "body": "The time allowed to pay for this booking has run out: it was cancelled and the room released. No charge was kept."
         }
-      }
+      },
+      "restartCta": "Start my booking again",
+      "homeCta": "Back to home"
     },
     "confirmation": {
       "metaTitle": "Your booking confirmation",
@@ -547,8 +553,17 @@
         "unknown": {
           "title": "Confirmation interrupted",
           "body": "An unexpected error interrupted the confirmation. Please try again in a moment."
+        },
+        "room-unavailable": {
+          "title": "Room no longer available",
+          "body": "This room has just been booked for your dates: your booking could not be confirmed. Other rooms at the hotel may still be free for the same stay."
         }
-      }
+      },
+      "refundIssued": "Full refund issued: the amount charged is returned to you in full. Depending on your bank, it shows on your account within a few days.",
+      "debitCaptured": "An amount was charged although this booking is not confirmed. Contact the hotel to get it refunded.",
+      "debitHeld": "An amount is still held on your card, without being charged: its release has not gone through yet. Avoid paying a second time in the meantime.",
+      "debitUnknown": "The status of your payment could not be verified yet. Before paying again, check your bookings; if an amount was charged without a confirmed booking, contact the hotel.",
+      "alternativesCta": "See available rooms"
     },
     "reservationSettledProofCta": "View my booking confirmation"
   }
