@@ -1,5 +1,10 @@
 import type { Locale } from "@/i18n/config";
-import { api, ApiClientError } from "@/lib/api-client";
+import {
+  api,
+  ApiClientError,
+  apiRequestBlob,
+  type ApiBlobResult,
+} from "@/lib/api-client";
 import {
   bookingContextQuery,
   normalizeSpecialRequests,
@@ -496,4 +501,53 @@ export function fetchReservation(
  */
 export function isOverCapacity(quote: BookingQuoteResult): boolean {
   return quote.roomCapacity !== null && quote.guests > quote.roomCapacity;
+}
+
+// --- Confirmation ferme et documents (story 3.2) ---------------------------------------------
+
+/**
+ * URL **navigateur** de la page de confirmation (story 3.2).
+ *
+ * Point de convergence de tous les chemins d'autorisation (retour direct, retour 3-DS par
+ * `return_url`, rechargement d'une carte déjà retenue) : une page dont le rôle est « garantir que
+ * cette réservation est confirmée, puis montrer la preuve » est naturellement rejouable.
+ *
+ * Le contexte de séjour, quand il est connu, est conservé : il permet à un échec de proposer le
+ * retour au récapitulatif plutôt qu'à l'accueil. Jamais de demande spéciale dans l'URL (RGPD).
+ */
+export function buildConfirmationUrl(
+  reservationId: string,
+  params?: ParsedBookingParams,
+): string {
+  const base = `/booking/confirmation?reservationId=${encodeURIComponent(reservationId)}`;
+  return params ? `${base}&${bookingContextQuery(params)}` : base;
+}
+
+/** Chemins BFF des documents de la preuve (domaine « réservation », réutilisés en story 4.3). */
+export const CONFIRMATION_DOCUMENT_ENDPOINTS = {
+  pdf: (reservationId: string) =>
+    `${BOOKING_ENDPOINTS.reservations}/${encodeURIComponent(reservationId)}/confirmation-pdf`,
+  qr: (reservationId: string) =>
+    `${BOOKING_ENDPOINTS.reservations}/${encodeURIComponent(reservationId)}/confirmation-qr`,
+} as const;
+
+export const confirmationDocumentKeys = {
+  pdf: (reservationId: string) =>
+    ["booking", "confirmation-pdf", reservationId.toLowerCase()] as const,
+  qr: (reservationId: string) =>
+    ["booking", "confirmation-qr", reservationId.toLowerCase()] as const,
+};
+
+/** PDF de confirmation, généré à la demande par le PMS (jamais stocké). */
+export function fetchConfirmationPdf(
+  reservationId: string,
+): Promise<ApiBlobResult> {
+  return apiRequestBlob(CONFIRMATION_DOCUMENT_ENDPOINTS.pdf(reservationId));
+}
+
+/** Image QR du jeton de check-in : seule l'image traverse, jamais le jeton. */
+export function fetchConfirmationQr(
+  reservationId: string,
+): Promise<ApiBlobResult> {
+  return apiRequestBlob(CONFIRMATION_DOCUMENT_ENDPOINTS.qr(reservationId));
 }

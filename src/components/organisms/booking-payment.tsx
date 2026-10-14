@@ -40,6 +40,7 @@ import {
   type ParsedBookingParams,
 } from "@/lib/validations/booking";
 import {
+  buildConfirmationUrl,
   buildIdentifyUrl,
   buildPaymentUrl,
   buildRecapUrl,
@@ -1025,13 +1026,25 @@ function ReservationPanel({
         </div>
       ) : null}
 
+      {/* Story 3.2 (C10) : une réservation déjà confirmée conduit à sa PREUVE, jamais à une impasse.
+          La page de confirmation la relit, la reconnaît confirmée et ne rejoue rien. */}
       {view === "settled" ? (
-        <p
-          className="rounded-lg bg-muted p-3 text-small text-muted-foreground"
+        <div
+          className="flex flex-col items-start gap-3 rounded-lg bg-muted p-3 text-small text-muted-foreground"
           data-testid="payment-reservation-settled"
         >
-          {t("reservationSettledNotice")}
-        </p>
+          <p>{t("reservationSettledNotice")}</p>
+          <Link
+            href={buildConfirmationUrl(reservation.reservationId, params)}
+            className={cn(
+              buttonVariants({ variant: "outline" }),
+              "min-h-(--tap-min)",
+            )}
+            data-testid="payment-reservation-settled-proof"
+          >
+            {t("reservationSettledProofCta")}
+          </Link>
+        </div>
       ) : null}
 
       {/* Statut indéterminé : **jamais** traité comme `Pending`. On ne propose pas de payer une
@@ -1069,6 +1082,7 @@ function ReservationPanel({
         <div data-testid="payment-element-placeholder">
           <BookingPaymentForm
             reservationId={reservation.reservationId}
+            params={params}
             expectedTotal={reservation.total}
             expectedCurrency={reservation.currency}
           />

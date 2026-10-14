@@ -1,3 +1,5 @@
+import { readFile } from "node:fs/promises";
+
 import { test, expect, type Page } from "@playwright/test";
 import AxeBuilder from "@axe-core/playwright";
 import { lastMail } from "./helpers/mail";
@@ -715,34 +717,55 @@ const STRIPE_EXTERNAL = {
   },
 };
 
+/** Confirmation ferme (story 3.2) : la seule route qui fait passer la réservation `Confirmed`. */
+const CONFIRM_ROUTE = "**/api/v1/payment/reservations/*/confirm";
+
 /**
- * Story 3.1 — **autorisation carte réelle** contre le vrai stack et le vrai Stripe (mode test).
+ * Attend que le QR soit **réellement décodé** par le navigateur (#3, AC-13) : une image présente
+ * dans le DOM, mais dont l'URL objet n'a pas encore été posée ou n'a rien décodé, serait un
+ * faux-vert (leçon 2.6 : `count()` sans attente).
+ */
+async function expectQrLoaded(page: Page): Promise<void> {
+  const qr = page.getByTestId("confirmation-qr-image");
+  await expect(qr).toBeVisible({ timeout: 30_000 });
+  await expect(qr).toHaveAttribute("src", /^blob:/);
+  await expect
+    .poll(
+      () =>
+        qr.evaluate(
+          (img: HTMLImageElement) => img.complete && img.naturalWidth > 0,
+        ),
+      { timeout: 15_000 },
+    )
+    .toBe(true);
+}
+
+/**
+ * Story 3.2 (#3, AC-13) — **paiement puis confirmation ferme** contre le vrai stack et le vrai
+ * Stripe (mode test).
  *
  * Ce que ni l'e2e isolé ni les tests d'intégration ne peuvent prouver :
- * - que le PMS crée bien un PaymentIntent en **capture manuelle** — l'intent atteint le statut
- *   `requires_capture`, et **rien n'est encaissé** ;
- * - que le `clientSecret` relayé par le BFF est réellement exploitable par Stripe.js (un jeton
- *   mal formé ou périmé ne se voit qu'ici) ;
- * - que la confirmation se résout **sans quitter le tunnel** (`redirect: "if_required"`) ;
+ * - que l'autorisation conduit d'elle-même à la page de confirmation (AC-1), sans rester sur
+ *   « paiement autorisé » ;
+ * - que le PMS capture la retenue et confirme (la preuve n'arrive qu'après sa réponse) ;
+ * - que le QR et le PDF traversent réellement d'une origine à l'autre (`:3001` → `:4000`) avec le
+ *   cookie de session (AC-8) — un mock ne voit pas CORS ;
+ * - l'accessibilité AA de la preuve avec de vraies données, en clair et en sombre ;
+ * - l'e-mail « Confirmée » du PMS, lu dans le capteur SMTP de la Phase 3.
  *
- * ⚠️ Ce scénario N'EXERCE PAS la 3-D Secure : il utilise la carte `4242…`, qui n'en déclenche
- * aucune. La carte 3-DS (`4000 0025 0000 3155`) ouvre une modale hébergée par Stripe dont
- * l'automatisation est fragile ; la branche `requires_action` est couverte en test d'intégration
- * (mock de `confirmPayment`). L'affirmation contraire figurait ici avant la revue de code 3.1 —
- * c'était une sur-déclaration.
- * - qu'après autorisation, l'écran n'annonce **jamais** une réservation confirmée (AC-8).
+ * ⚠️ Ce scénario N'EXERCE PAS la 3-D Secure (carte `4242…`) : la branche `requires_action` et le
+ * `return_url` vers la confirmation sont couverts en test d'intégration.
  *
- * ⚠️ Ce test place une vraie autorisation sur une carte de test Stripe. Elle n'est jamais capturée
- * (c'est le périmètre de la story 3.2) et expire d'elle-même sous ~7 jours.
+ * ⚠️ Ce test **encaisse** une vraie autorisation sur une carte de test Stripe (mode test) et consomme
+ * définitivement l'inventaire du séjour : d'où `paidStayOffset`, une fenêtre neuve à chaque passage.
  */
 test(
-  "Paiement carte contre le vrai Stripe : autorisation sans capture, sans quitter le tunnel",
+  "Paiement puis confirmation ferme contre le vrai Stripe : code, QR, PDF, axe et e-mail",
   STRIPE_EXTERNAL,
   async ({ page }) => {
-    // Budget élargi : ce scénario enchaîne de vrais aller-retours réseau avec Stripe (chargement de
-    // js.stripe.com, montage du Payment Element, confirmation, sonde de statut). Les 30 s par défaut
-    // suffisent aux scénarios qui ne parlent qu'au stack local, pas à celui-ci.
-    test.setTimeout(150_000);
+    // Budget élargi : vrais aller-retours avec Stripe (Payment Element, autorisation, puis capture
+    // côté PMS) et e-mail envoyé par la file Hangfire du PMS.
+    test.setTimeout(240_000);
     const failures = watchForFailures(page, PAYMENT_PROBE);
     const email = `smoke-pay-${Date.now()}@example.com`;
 
@@ -752,42 +775,76 @@ test(
     await expect(cta).toBeEnabled({ timeout: 20_000 });
     await cta.click();
 
-    await expect(page.getByTestId("payment-reservation-code")).toBeVisible({
-      timeout: 20_000,
-    });
+    const paymentCode = page.getByTestId("payment-reservation-code");
+    await expect(paymentCode).toBeVisible({ timeout: 20_000 });
+    const reservationCode = (await paymentCode.innerText()).trim();
 
     // Le formulaire n'apparaît qu'une fois l'intent obtenu du BFF **et** Stripe.js chargé.
-    const form = page.getByTestId("payment-form");
-    await expect(form).toBeVisible({ timeout: 30_000 });
-
-    // AC-1 : la promesse « aucun débit ferme » est portée par le `captureMethod` renvoyé par le PMS.
-    // Si le PaymentIntent n'était pas en capture manuelle, ce bloc disparaîtrait au lieu de mentir.
+    await expect(page.getByTestId("payment-form")).toBeVisible({
+      timeout: 30_000,
+    });
+    // La promesse « aucun débit ferme » est portée par le `captureMethod` renvoyé par le PMS.
     await expect(page.getByTestId("payment-no-firm-debit")).toBeVisible();
 
-    // Saisie de la carte de test dans l'iframe Stripe. Le Payment Element expose un seul champ
-    // combiné ; on le remplit par saisie clavier plutôt que par sélecteurs internes (instables).
     await fillTestCard(page);
-
+    const confirmedSince = new Date();
     await submitPayment(page);
 
-    // AC-3 : l'autorisation aboutit **sur la page** (`redirect: "if_required"`).
-    const authorized = page.getByTestId("payment-authorized");
-    await expect(authorized).toBeVisible({ timeout: 60_000 });
-    await expect(page).toHaveURL(/\/booking\/payment\?/);
+    // AC-1 : l'autorisation conduit à la page de confirmation, jamais à un terminus « autorisé ».
+    await expect(page).toHaveURL(/\/booking\/confirmation\?reservationId=/, {
+      timeout: 60_000,
+    });
+    const proof = page.getByTestId("confirmation-proof");
+    await expect(proof).toBeVisible({ timeout: 60_000 });
+    await expect(proof).toHaveAttribute("data-status", "Confirmed");
+    await expect(page.getByTestId("confirmation-badge")).toBeVisible();
 
-    // AC-8 : autorisé n'est PAS confirmé. Aucun code de confirmation, aucun QR, aucun PDF, aucune
-    // promesse d'e-mail — c'est le périmètre de la story 3.2. Défaut réel trouvé en Phase 3 de 2.3.
-    await expect(authorized).not.toContainText(/confirmée|e-?mail|QR|PDF/i);
-
-    // La réservation reste `Pending` : seule la confirmation la fera basculer.
-    await expect(page.getByTestId("payment-reservation-panel")).toHaveAttribute(
-      "data-status",
-      "Pending",
+    // Le Code est celui que le PMS a généré à la création.
+    await expect(page.getByTestId("confirmation-code")).toHaveText(
+      reservationCode,
     );
+    await expect(page.getByTestId("confirmation-total")).toHaveText(/\d/);
 
-    // Le formulaire a disparu : reproposer de payer une carte déjà autorisée serait le chemin du
-    // double débit (AC-6).
-    await expect(page.getByTestId("payment-submit")).toHaveCount(0);
+    // AC-13 : QR effectivement chargé, puis PDF téléchargé qui commence par `%PDF`.
+    await expectQrLoaded(page);
+
+    const download = page.waitForEvent("download", { timeout: 60_000 });
+    await page.getByTestId("confirmation-pdf").click();
+    const file = await download;
+    expect(file.suggestedFilename()).toBe(`${reservationCode}.pdf`);
+    const bytes = await readFile((await file.path())!);
+    expect(bytes.subarray(0, 4).toString("latin1")).toBe("%PDF");
+
+    // AC-9 : l'e-mail est « en route », jamais annoncé comme reçu.
+    await expect(page.getByTestId("confirmation-email")).toBeVisible();
+
+    // AC-11 : audit axe de la preuve réelle, en clair puis en sombre.
+    for (const theme of ["light", "dark"] as const) {
+      await page.emulateMedia({ colorScheme: theme });
+      await expect(page.getByTestId("confirmation-qr-image")).toBeVisible();
+      const results = await new AxeBuilder({ page })
+        .withTags(WCAG_TAGS)
+        .analyze();
+      expect(results.violations, `preuve (${theme})`).toEqual([]);
+    }
+
+    /*
+     * E-mail « Confirmée » du PMS (outbox puis job Hangfire), lu dans le capteur SMTP. L'e-mail de
+     * « demande de réservation » part à la même adresse : on attend celui de la confirmation.
+     */
+    await expect
+      .poll(
+        async () => {
+          const mail = await lastMail({
+            to: email,
+            since: confirmedSince,
+            timeoutMs: 5_000,
+          }).catch(() => null);
+          return mail?.subject ?? "";
+        },
+        { timeout: 90_000, intervals: [2_000] },
+      )
+      .toMatch(/confirm/i);
 
     expect(failures, `échecs console/réseau : ${failures.join(" | ")}`).toEqual(
       [],
@@ -796,40 +853,74 @@ test(
 );
 
 /**
- * Story 3.1 / AC-6 — un rechargement après autorisation ne repropose jamais de payer.
+ * Story 3.2 (#3, AC-1) — **rechargement d'une page dont la carte est déjà retenue** : le chemin
+ * NOMINAL en production (le webhook est arrivé, l'intent n'est plus payable).
  *
- * L'écran doit relire l'état réel de l'intent chez Stripe (`requires_capture`) et rendre l'état
- * « autorisé », et non un formulaire vierge. Le PMS, de son côté, refuse d'émettre un second intent.
+ * Pour le reproduire contre le vrai stack, la toute première confirmation est **interrompue côté
+ * navigateur** (la requête n'atteint jamais le BFF) : la réservation reste `Pending`, carte
+ * retenue. Le rechargement de la page de paiement doit alors conduire à la confirmation, jamais
+ * reproposer de payer ni afficher un bandeau d'erreur. Puis, une fois confirmée, la page de
+ * paiement mène à la MÊME preuve (chemin idempotent).
  */
 test(
-  "Rechargement après autorisation : aucune seconde invitation à payer",
+  "Rechargement après autorisation : la page de paiement conduit à la confirmation",
   STRIPE_EXTERNAL,
   async ({ page }) => {
-    test.setTimeout(150_000);
+    test.setTimeout(240_000);
     const email = `smoke-pay2-${Date.now()}@example.com`;
 
     await goToPayment(page, email, paidStayOffset(1));
     await page.getByTestId("payment-create-cta").click();
-    await expect(page.getByTestId("payment-reservation-code")).toBeVisible({
-      timeout: 20_000,
+    const paymentCode = page.getByTestId("payment-reservation-code");
+    await expect(paymentCode).toBeVisible({ timeout: 20_000 });
+    const reservationCode = (await paymentCode.innerText()).trim();
+    await expect(page).toHaveURL(/reservationId=/, { timeout: 20_000 });
+    const paymentUrl = page.url();
+
+    await expect(page.getByTestId("payment-form")).toBeVisible({
+      timeout: 30_000,
     });
-
-    const form = page.getByTestId("payment-form");
-    await expect(form).toBeVisible({ timeout: 30_000 });
-
     await fillTestCard(page);
+
+    // Interruption de la seule confirmation : panne réseau simulée côté navigateur.
+    await page.route(CONFIRM_ROUTE, (route) => route.abort("failed"));
     await submitPayment(page);
 
-    await expect(page.getByTestId("payment-authorized")).toBeVisible({
+    await expect(page).toHaveURL(/\/booking\/confirmation\?/, {
       timeout: 60_000,
     });
+    // Une panne n'est jamais un cul-de-sac : motif, aucun débit conservé, « Réessayer ».
+    await expect(page.getByTestId("confirmation-failed")).toBeVisible({
+      timeout: 30_000,
+    });
+    await expect(page.getByTestId("confirmation-retry")).toBeVisible();
+    await page.unroute(CONFIRM_ROUTE);
 
-    await page.reload();
+    // Rechargement de la page de paiement : carte déjà retenue → confirmation, sans formulaire.
+    await page.goto(paymentUrl);
+    await expect(page).toHaveURL(/\/booking\/confirmation\?/, {
+      timeout: 60_000,
+    });
+    await expect(page.getByTestId("confirmation-proof")).toBeVisible({
+      timeout: 60_000,
+    });
+    await expect(page.getByTestId("confirmation-code")).toHaveText(
+      reservationCode,
+    );
 
-    // Après rechargement : toujours autorisé, jamais un nouveau formulaire de paiement.
-    await expect(page.getByTestId("payment-authorized")).toBeVisible({
+    // Réservation confirmée : la page de paiement ne repropose rien et mène à la MÊME preuve.
+    await page.goto(paymentUrl);
+    await expect(page.getByTestId("payment-reservation-settled")).toBeVisible({
       timeout: 30_000,
     });
     await expect(page.getByTestId("payment-submit")).toHaveCount(0);
+    await page.getByTestId("payment-reservation-settled-proof").click();
+    await expect(page.getByTestId("confirmation-proof")).toBeVisible({
+      timeout: 30_000,
+    });
+    await expect(page.getByTestId("confirmation-code")).toHaveText(
+      reservationCode,
+    );
+    await expectQrLoaded(page);
   },
 );

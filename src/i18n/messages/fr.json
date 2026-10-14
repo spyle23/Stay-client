@@ -464,6 +464,92 @@
           "body": "Nous n'avons pas pu vérifier l'état de votre paiement. Rechargez la page pour éviter tout risque de double débit."
         }
       }
-    }
+    },
+    "confirmation": {
+      "metaTitle": "Confirmation de votre réservation",
+      "confirmingTitle": "Confirmation de votre réservation…",
+      "confirmingBody": "Nous encaissons la retenue sur votre carte et confirmons votre chambre auprès de l'hôtel. Ne fermez pas cette page.",
+      "announce": "Votre réservation est confirmée.",
+      "title": "Réservation confirmée",
+      "subtitle": "Votre chambre est garantie. Voici votre preuve de réservation.",
+      "badge": "Confirmée",
+      "codeLabel": "Code de réservation",
+      "codeHelp": "Communiquez ce code à l'hôtel pour toute question sur votre séjour.",
+      "qrTitle": "Votre code d'arrivée",
+      "qrAlt": "Code à présenter à la réception de l'hôtel le jour de votre arrivée pour retrouver votre réservation.",
+      "qrLoading": "Chargement de votre code d'arrivée…",
+      "qrError": "Votre code d'arrivée n'a pas pu être chargé.",
+      "qrRetry": "Recharger le code",
+      "pdfButton": "Télécharger la confirmation (PDF)",
+      "pdfGenerating": "Génération du PDF en cours…",
+      "pdfReady": "Votre PDF est prêt : le téléchargement a démarré.",
+      "pdfError": "Le PDF n'a pas pu être généré. Réessayez dans un instant.",
+      "summaryTitle": "Récapitulatif",
+      "hotelLabel": "Hôtel",
+      "roomLabel": "Chambre",
+      "roomValue": "{category} · n° {number}",
+      "checkInLabel": "Arrivée",
+      "checkOutLabel": "Départ",
+      "nightsLabel": "Durée",
+      "guestsLabel": "Voyageurs",
+      "totalPaidLabel": "Total payé",
+      "emailOnItsWay": "Un e-mail de confirmation avec ce PDF est en route vers votre adresse.",
+      "emailLanguageFallback": "Vous avez choisi : {language}. L'hôtel rédige aujourd'hui ses e-mails dans sa propre langue : celui-ci peut donc arriver dans une autre langue.",
+      "accountCta": "Mes réservations",
+      "homeCta": "Retour à l'accueil",
+      "recapCta": "Retour au récapitulatif",
+      "loginCta": "Me reconnecter",
+      "retry": "Réessayer",
+      "noDebitKept": "Aucun débit n'a été conservé : sans confirmation, la retenue sur votre carte n'est pas encaissée.",
+      "invalidTitle": "Réservation introuvable",
+      "invalidBody": "Ce lien de confirmation est incomplet. Retrouvez vos réservations depuis votre compte ou recommencez votre recherche.",
+      "errors": {
+        "payment-not-authorized": {
+          "title": "Paiement non autorisé",
+          "body": "Aucun paiement autorisé n'a été trouvé pour cette réservation : nous ne pouvons pas la confirmer. Reprenez le paiement depuis le récapitulatif."
+        },
+        "amount-mismatch": {
+          "title": "Montant différent du total dû",
+          "body": "Le montant autorisé sur votre carte ne correspond pas au total de votre réservation. Nous n'avons rien encaissé."
+        },
+        "capture-failed": {
+          "title": "Encaissement momentanément impossible",
+          "body": "Notre prestataire de paiement n'a pas pu finaliser l'encaissement. Votre réservation est conservée : réessayez dans un instant."
+        },
+        "authorisation-expired": {
+          "title": "Autorisation de paiement expirée",
+          "body": "La retenue sur votre carte a expiré avant la confirmation. Votre banque a libéré les fonds."
+        },
+        "reservation-not-found": {
+          "title": "Réservation introuvable",
+          "body": "Nous ne retrouvons pas cette réservation sur votre compte."
+        },
+        "reservation-cancelled": {
+          "title": "Réservation annulée",
+          "body": "Cette réservation a été annulée avant sa confirmation."
+        },
+        "not-owner": {
+          "title": "Réservation introuvable",
+          "body": "Cette réservation n'est pas rattachée à votre compte."
+        },
+        "session-invalid": {
+          "title": "Session expirée",
+          "body": "Identifiez-vous à nouveau pour afficher la confirmation de votre réservation."
+        },
+        "rejected": {
+          "title": "Confirmation impossible",
+          "body": "La confirmation de cette réservation n'a pas été acceptée."
+        },
+        "unavailable": {
+          "title": "Service momentanément indisponible",
+          "body": "La confirmation ne répond pas pour le moment. Votre réservation est conservée : réessayez dans un instant."
+        },
+        "unknown": {
+          "title": "Confirmation interrompue",
+          "body": "Une erreur inattendue a interrompu la confirmation. Réessayez dans un instant."
+        }
+      }
+    },
+    "reservationSettledProofCta": "Voir la confirmation de ma réservation"
   }
 }

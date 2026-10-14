@@ -904,6 +904,15 @@ describe("BookingPayment — statut réel de la réservation (AC-9)", () => {
     ).not.toBeInTheDocument();
   });
 
+  it("story 3.2 (C10) : une réservation confirmée conduit à sa preuve, jamais à une impasse", async () => {
+    await withStatus({ status: "Confirmed", holdExpiresAt: null });
+
+    const link = screen.getByTestId("payment-reservation-settled-proof");
+    const target = new URL(link.getAttribute("href")!, "http://localhost");
+    expect(target.pathname).toBe("/booking/confirmation");
+    expect(target.searchParams.get("reservationId")).toBe(RESERVATION_ID);
+  });
+
   /**
    * `minorUnitExponent` retombe silencieusement sur 2 décimales pour une devise inconnue de l'ICU :
    * afficher le montant serait risquer un facteur 10ⁿ juste avant le paiement (UX-DR-9.2).

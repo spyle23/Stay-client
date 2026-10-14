@@ -1,4 +1,9 @@
+import type { Locale } from "@/i18n/config";
 import { apiRequest, ApiClientError } from "@/lib/api-client";
+import type {
+  ReservationServiceResult,
+  ReservationStatus,
+} from "@/services/booking.service";
 
 /**
  * Frontière du domaine **paiement** côté navigateur (story 3.1, FR-12).
@@ -11,12 +16,18 @@ import { apiRequest, ApiClientError } from "@/lib/api-client";
 export const PAYMENT_ENDPOINTS = {
   intent: (reservationId: string) =>
     `/payment/reservations/${encodeURIComponent(reservationId)}/intent`,
+  /** Story 3.2 — confirmation ferme (capture + `Pending → Confirmed` côté PMS) et preuve. */
+  confirm: (reservationId: string) =>
+    `/payment/reservations/${encodeURIComponent(reservationId)}/confirm`,
 } as const;
 
 export const paymentKeys = {
   all: ["payment"] as const,
   intent: (reservationId: string) =>
     ["payment", "intent", reservationId.toLowerCase()] as const,
+  /** Clé de MUTATION de la confirmation : l'état survit aux montages (voir `use-confirm-reservation`). */
+  confirm: (reservationId: string) =>
+    ["payment", "confirm", reservationId.toLowerCase()] as const,
 };
 
 /**
@@ -124,3 +135,112 @@ function isKnownReason(value: string): value is PaymentFailureReason {
  */
 export const RETRYABLE_PAYMENT_REASONS: ReadonlySet<PaymentFailureReason> =
   new Set<PaymentFailureReason>(["unavailable", "unknown", "rejected"]);
+
+// --- Confirmation ferme post-paiement (story 3.2) -------------------------------------------
+
+/**
+ * Preuve de confirmation — miroir **exact** du `ConfirmationProofDto` du BFF. Aucune donnée
+ * personnelle, aucun jeton de check-in (seule son image QR est servie, à part).
+ */
+export interface ConfirmationProofResult {
+  reservationId: string;
+  reservationCode: string;
+  status: ReservationStatus;
+  hotelName: string | null;
+  roomNumber: string | null;
+  roomCategory: string | null;
+  /** Date-only `AAAA-MM-JJ`. */
+  checkInDate: string;
+  checkOutDate: string;
+  nights: number;
+  guests: number;
+  currency: string;
+  /** Unités mineures entières de `currency`. */
+  total: number;
+  roomTotal: number;
+  servicesTotal: number;
+  services: ReservationServiceResult[];
+  /**
+   * Montant réellement encaissé, relu du PMS (unités mineures) ; `null` quand cet appel ne l'a pas
+   * relu (réservation déjà confirmée). L'écran affiche alors `total`, que le PMS garantit égal au
+   * capturé : il refuse de confirmer quand l'autorisé diverge du dû.
+   */
+  capturedAmount: number | null;
+  communicationLocale: Locale | null;
+  /** `hotel_default_fallback` tant que la dépendance PMS D10 n'est pas livrée. */
+  communicationLocaleState: "applied" | "hotel_default_fallback";
+  /** `true` si la réservation était déjà confirmée avant cet appel (rechargement, autre onglet). */
+  alreadyConfirmed: boolean;
+}
+
+/**
+ * Motif machine d'un échec de confirmation (`errors.reason` du BFF), plus `unavailable` (503) et
+ * `unknown`. Chaque valeur commande une issue différente — aucune n'est un cul-de-sac.
+ */
+export type ConfirmFailureReason =
+  | "payment-not-authorized"
+  | "amount-mismatch"
+  | "capture-failed"
+  | "authorisation-expired"
+  | "reservation-not-found"
+  | "reservation-cancelled"
+  | "not-owner"
+  | "session-invalid"
+  | "rejected"
+  | "unavailable"
+  | "unknown";
+
+/**
+ * Confirme la réservation et rend la preuve. Idempotent côté BFF et PMS : un rejeu (rechargement,
+ * second onglet) rend la même preuve, jamais une seconde capture.
+ */
+export async function confirmReservation(
+  reservationId: string,
+): Promise<ConfirmationProofResult> {
+  return apiRequest<ConfirmationProofResult>(
+    PAYMENT_ENDPOINTS.confirm(reservationId),
+    { method: "POST" },
+  );
+}
+
+const KNOWN_CONFIRM_REASONS: ReadonlySet<string> =
+  new Set<ConfirmFailureReason>([
+    "payment-not-authorized",
+    "amount-mismatch",
+    "capture-failed",
+    "authorisation-expired",
+    "reservation-not-found",
+    "reservation-cancelled",
+    "not-owner",
+    "session-invalid",
+    "rejected",
+  ]);
+
+/**
+ * Traduit un échec de confirmation en motif exploitable par l'écran. Le motif se lit dans
+ * `errors.reason`, jamais dans le message (destiné à l'affichage, il changera).
+ */
+export function confirmFailureReason(error: unknown): ConfirmFailureReason {
+  if (!(error instanceof ApiClientError)) {
+    return "unknown";
+  }
+  const reason = error.errors?.reason?.[0];
+  if (reason && KNOWN_CONFIRM_REASONS.has(reason)) {
+    return reason as ConfirmFailureReason;
+  }
+  if (error.status === 503) {
+    return "unavailable";
+  }
+  if (error.status === 401) {
+    return "session-invalid";
+  }
+  return "unknown";
+}
+
+/**
+ * Motifs pour lesquels **réessayer à l'identique** peut aboutir : une indisponibilité, une erreur
+ * inattendue, ou une capture que Stripe n'a pas pu faire (la confirmation est idempotente). Tout le
+ * reste est déterministe.
+ */
+export const RETRYABLE_CONFIRM_REASONS: ReadonlySet<ConfirmFailureReason> =
+  new Set<ConfirmFailureReason>(["unavailable", "unknown", "capture-failed"]);

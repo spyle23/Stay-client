@@ -464,6 +464,92 @@
           "body": "We could not check your payment status. Reload the page to avoid any risk of a double charge."
         }
       }
-    }
+    },
+    "confirmation": {
+      "metaTitle": "Your booking confirmation",
+      "confirmingTitle": "Confirming your booking…",
+      "confirmingBody": "We are collecting the hold on your card and confirming your room with the hotel. Please keep this page open.",
+      "announce": "Your booking is confirmed.",
+      "title": "Booking confirmed",
+      "subtitle": "Your room is guaranteed. Here is your proof of booking.",
+      "badge": "Confirmed",
+      "codeLabel": "Booking code",
+      "codeHelp": "Give this code to the hotel for any question about your stay.",
+      "qrTitle": "Your arrival code",
+      "qrAlt": "Code to show at the hotel front desk on your arrival day so staff can find your booking.",
+      "qrLoading": "Loading your arrival code…",
+      "qrError": "Your arrival code could not be loaded.",
+      "qrRetry": "Reload the code",
+      "pdfButton": "Download the confirmation (PDF)",
+      "pdfGenerating": "Generating the PDF…",
+      "pdfReady": "Your PDF is ready: the download has started.",
+      "pdfError": "The PDF could not be generated. Please try again in a moment.",
+      "summaryTitle": "Summary",
+      "hotelLabel": "Hotel",
+      "roomLabel": "Room",
+      "roomValue": "{category} · no. {number}",
+      "checkInLabel": "Check-in",
+      "checkOutLabel": "Check-out",
+      "nightsLabel": "Length of stay",
+      "guestsLabel": "Guests",
+      "totalPaidLabel": "Total paid",
+      "emailOnItsWay": "A confirmation email with this PDF is on its way to your address.",
+      "emailLanguageFallback": "You chose: {language}. The hotel currently writes its emails in its own language, so this one may arrive in another language.",
+      "accountCta": "My bookings",
+      "homeCta": "Back to home",
+      "recapCta": "Back to the summary",
+      "loginCta": "Sign in again",
+      "retry": "Try again",
+      "noDebitKept": "No charge has been kept: without confirmation, the hold on your card is not collected.",
+      "invalidTitle": "Booking not found",
+      "invalidBody": "This confirmation link is incomplete. Find your bookings from your account or start a new search.",
+      "errors": {
+        "payment-not-authorized": {
+          "title": "Payment not authorised",
+          "body": "We found no authorised payment for this booking, so we cannot confirm it. Please resume payment from the summary."
+        },
+        "amount-mismatch": {
+          "title": "Amount differs from the total due",
+          "body": "The amount held on your card does not match your booking total. We have not collected anything."
+        },
+        "capture-failed": {
+          "title": "Payment collection temporarily unavailable",
+          "body": "Our payment provider could not complete the collection. Your booking is kept: please try again in a moment."
+        },
+        "authorisation-expired": {
+          "title": "Payment authorisation expired",
+          "body": "The hold on your card expired before confirmation. Your bank has released the funds."
+        },
+        "reservation-not-found": {
+          "title": "Booking not found",
+          "body": "We cannot find this booking on your account."
+        },
+        "reservation-cancelled": {
+          "title": "Booking cancelled",
+          "body": "This booking was cancelled before it could be confirmed."
+        },
+        "not-owner": {
+          "title": "Booking not found",
+          "body": "This booking is not linked to your account."
+        },
+        "session-invalid": {
+          "title": "Session expired",
+          "body": "Sign in again to view your booking confirmation."
+        },
+        "rejected": {
+          "title": "Confirmation not possible",
+          "body": "The confirmation of this booking was not accepted."
+        },
+        "unavailable": {
+          "title": "Service temporarily unavailable",
+          "body": "Confirmation is not responding right now. Your booking is kept: please try again in a moment."
+        },
+        "unknown": {
+          "title": "Confirmation interrupted",
+          "body": "An unexpected error interrupted the confirmation. Please try again in a moment."
+        }
+      }
+    },
+    "reservationSettledProofCta": "View my booking confirmation"
   }
 }

@@ -139,6 +139,40 @@ export async function apiRequest<T>(
   return json as T;
 }
 
+/** Document binaire lu au BFF (PDF, PNG) — story 3.2. */
+export interface ApiBlobResult {
+  blob: Blob;
+  contentType: string;
+}
+
+/**
+ * Lecture d'un **document binaire** au BFF (story 3.2, C1).
+ *
+ * ⚠️ Le front (:3001) et le BFF (:4000) sont d'origines différentes : un `<img src>` ou un
+ * `<a href>` direct vers le BFF partirait **sans** le cookie de session. Les documents passent donc
+ * par `fetch` + `credentials: "include"` ; l'appelant en fait une URL objet qu'il **révoque** au
+ * démontage. Même traitement des 401 et des erreurs JSON que `apiRequest` : une 404 reste une 404
+ * lisible, jamais un « PDF corrompu ».
+ */
+export async function apiRequestBlob(endpoint: string): Promise<ApiBlobResult> {
+  const response = await fetch(
+    `${API_BASE_URL}${endpoint}`,
+    buildInit("GET", undefined, {}),
+  );
+
+  if (response.status === 401) {
+    throw new ApiClientError("Session expirée", 401);
+  }
+  if (!response.ok) {
+    throw await toApiClientError(response);
+  }
+
+  const blob = await response.blob();
+  const contentType =
+    response.headers.get("Content-Type")?.trim() || blob.type || "";
+  return { blob, contentType };
+}
+
 export async function apiRequestList<T>(
   endpoint: string,
   options: RequestOptions = {},
