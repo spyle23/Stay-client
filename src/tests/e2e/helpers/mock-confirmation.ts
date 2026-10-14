@@ -56,7 +56,7 @@ export function confirmationProof(
 export interface ConfirmOutcome {
   status?: number;
   reason?: string;
-  /** #4 — statut de débit porté par le refus (`errors.debit`) : `none`, `refunded`, `captured`. */
+  /** #4 — statut de débit du refus (`errors.debit`) : `none`, `refunded`, `captured`, `held`. */
   debit?: string;
   proof?: Record<string, unknown>;
 }

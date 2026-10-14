@@ -8,6 +8,7 @@ import {
   fetchConfirmationQr,
 } from "@/services/booking.service";
 import {
+  confirmDebitStatement,
   confirmFailureDebit,
   confirmFailureReason,
   confirmReservation,
@@ -141,6 +142,54 @@ describe("confirmation — services", () => {
     it("room-unavailable n’est jamais rejouable (la réservation est annulée)", () => {
       expect(RETRYABLE_CONFIRM_REASONS.has("room-unavailable")).toBe(false);
     });
+
+    it("lit aussi une autorisation encore posée (held) sur un 503 sans motif", () => {
+      expect(
+        confirmFailureDebit(new ApiClientError("…", 503, { debit: ["held"] })),
+      ).toBe("held");
+    });
+  });
+
+  /**
+   * Revue #4, ronde 1 : l'absence d'information n'est JAMAIS « aucun débit ». Seuls les motifs qui
+   * l'établissent par construction (rien n'a été ni ne peut être encaissé) gardent cet énoncé.
+   */
+  describe("confirmDebitStatement (#4, AC-8)", () => {
+    it.each<ConfirmDebitStatus>(["none", "refunded", "captured", "held"])(
+      "un statut établi par le BFF (%s) fait foi, quel que soit le motif",
+      (debit) => {
+        expect(confirmDebitStatement("unavailable", debit)).toBe(debit);
+        expect(confirmDebitStatement("room-unavailable", debit)).toBe(debit);
+      },
+    );
+
+    it.each<ConfirmFailureReason>([
+      "payment-not-authorized",
+      "amount-mismatch",
+      "capture-failed",
+      "authorisation-expired",
+    ])(
+      "%s sans statut : « aucun débit », établi par le motif lui-même",
+      (reason) => {
+        expect(confirmDebitStatement(reason, null)).toBe("none");
+      },
+    );
+
+    it.each<ConfirmFailureReason>([
+      "unavailable",
+      "unknown",
+      "room-unavailable",
+      "reservation-cancelled",
+      "reservation-not-found",
+      "not-owner",
+      "session-invalid",
+      "rejected",
+    ])(
+      "%s sans statut : débit non établi (unknown), jamais « aucun débit »",
+      (reason) => {
+        expect(confirmDebitStatement(reason, null)).toBe("unknown");
+      },
+    );
   });
 
   describe("RETRYABLE_CONFIRM_REASONS", () => {

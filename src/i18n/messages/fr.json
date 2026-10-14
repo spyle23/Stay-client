@@ -560,7 +560,9 @@
         }
       },
       "refundIssued": "Remboursement intégral émis : la somme prélevée vous est restituée en totalité. Selon votre banque, elle réapparaît sur votre compte sous quelques jours.",
-      "debitCaptured": "Un montant a été encaissé pour cette réservation annulée. Contactez l'hôtel pour en obtenir le remboursement.",
+      "debitCaptured": "Un montant a été encaissé alors que cette réservation n'est pas confirmée. Contactez l'hôtel pour en obtenir le remboursement.",
+      "debitHeld": "Un montant reste réservé sur votre carte, sans être encaissé : sa libération n'a pas encore abouti. Évitez de payer une seconde fois en attendant.",
+      "debitUnknown": "L'état de votre paiement n'a pas encore pu être vérifié. Avant de payer à nouveau, consultez vos réservations ; si un montant a été prélevé sans réservation confirmée, contactez l'hôtel.",
       "alternativesCta": "Voir les chambres disponibles"
     },
     "reservationSettledProofCta": "Voir la confirmation de ma réservation"

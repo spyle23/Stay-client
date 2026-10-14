@@ -560,7 +560,9 @@
         }
       },
       "refundIssued": "Full refund issued: the amount charged is returned to you in full. Depending on your bank, it shows on your account within a few days.",
-      "debitCaptured": "An amount was charged for this cancelled booking. Contact the hotel to get it refunded.",
+      "debitCaptured": "An amount was charged although this booking is not confirmed. Contact the hotel to get it refunded.",
+      "debitHeld": "An amount is still held on your card, without being charged: its release has not gone through yet. Avoid paying a second time in the meantime.",
+      "debitUnknown": "The status of your payment could not be verified yet. Before paying again, check your bookings; if an amount was charged without a confirmed booking, contact the hotel.",
       "alternativesCta": "See available rooms"
     },
     "reservationSettledProofCta": "View my booking confirmation"

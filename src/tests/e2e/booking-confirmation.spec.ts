@@ -259,6 +259,45 @@ test.describe("Confirmation ferme (story 3.2)", () => {
     await expect(page.getByTestId("confirmation-no-debit")).toHaveCount(0);
   });
 
+  test("#4 AC-8 : chambre prise, débit non établi par le BFF — jamais « aucun débit »", async ({
+    page,
+  }) => {
+    await openConfirmation(page, {
+      sequence: [{ status: 409, reason: "room-unavailable" }],
+    });
+
+    await expect(page.getByTestId("confirmation-debit-unknown")).toContainText(
+      "pas encore pu être vérifié",
+    );
+    await expect(page.getByTestId("confirmation-no-debit")).toHaveCount(0);
+    await expect(page.getByTestId("confirmation-alternatives")).toBeVisible();
+  });
+
+  test("#4 AC-8 : paiement non libéré (503, retenue posée) — retenue énoncée, puis « Réessayer » aboutit", async ({
+    page,
+  }) => {
+    const mock = await openConfirmation(page, {
+      sequence: [
+        { status: 503, debit: "held" },
+        { status: 503, debit: "held" },
+        {},
+      ],
+    });
+
+    await expect(page.getByTestId("confirmation-debit-held")).toContainText(
+      "réservé sur votre carte",
+    );
+    await expect(page.getByTestId("confirmation-no-debit")).toHaveCount(0);
+    await expect(page.getByTestId("confirmation-failed")).not.toContainText(
+      "Refus du BFF",
+    );
+
+    await page.getByTestId("confirmation-retry").click();
+
+    await expect(page.getByTestId("confirmation-proof")).toBeVisible();
+    expect(mock.confirmCalls.length).toBeGreaterThanOrEqual(3);
+  });
+
   test("lien sans identifiant exploitable : état explicite, aucun appel au BFF", async ({
     page,
   }) => {

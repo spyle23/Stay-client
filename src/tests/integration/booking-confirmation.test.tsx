@@ -409,16 +409,17 @@ describe("BookingConfirmation", () => {
     });
 
     it.each([
-      "payment-not-authorized",
-      "amount-mismatch",
-      "authorisation-expired",
-      "reservation-cancelled",
-      "reservation-not-found",
-      "not-owner",
-      "rejected",
+      ["payment-not-authorized", "confirmation-no-debit"],
+      ["amount-mismatch", "confirmation-no-debit"],
+      ["authorisation-expired", "confirmation-no-debit"],
+      // Revue #4, ronde 1 : sans statut établi par le BFF, ces motifs ne prouvent rien du débit.
+      ["reservation-cancelled", "confirmation-debit-unknown"],
+      ["reservation-not-found", "confirmation-debit-unknown"],
+      ["not-owner", "confirmation-debit-unknown"],
+      ["rejected", "confirmation-debit-unknown"],
     ])(
       "%s : aucun « Réessayer », mais une sortie (récapitulatif et accueil)",
-      async (reason) => {
+      async (reason, debitTestId) => {
         installBff({ [CONFIRM_URL]: [fail(409, reason)] });
         renderConfirmation();
 
@@ -433,7 +434,7 @@ describe("BookingConfirmation", () => {
           "href",
           "/",
         );
-        expect(screen.getByTestId("confirmation-no-debit")).toBeVisible();
+        expect(screen.getByTestId(debitTestId)).toBeVisible();
         // Le texte technique du BFF n'est jamais affiché.
         expect(panel.textContent).not.toContain("Texte technique");
       },
@@ -559,7 +560,96 @@ describe("BookingConfirmation", () => {
       await screen.findByTestId("confirmation-failed");
       expect(screen.queryByTestId("confirmation-alternatives")).toBeNull();
       expect(screen.getByTestId("confirmation-home")).toBeVisible();
-      expect(screen.getByTestId("confirmation-no-debit")).toBeVisible();
+      // Le BFF n'a pas établi le débit : l'écran ne le déduit pas.
+      expect(screen.getByTestId("confirmation-debit-unknown")).toBeVisible();
+      expect(screen.queryByTestId("confirmation-no-debit")).toBeNull();
+    });
+
+    /**
+     * Revue #4, ronde 1 — jamais « aucun débit » d'une absence d'information : lecture du débit en
+     * échec côté BFF, ou paiement que Stripe n'a pas pu libérer (503 rejouable, statut réel joint).
+     */
+    it("room-unavailable sans statut de débit : « vérification en cours », jamais « aucun débit »", async () => {
+      installBff({
+        [CONFIRM_URL]: [failWith(409, { reason: ["room-unavailable"] })],
+      });
+      renderConfirmation();
+
+      const debit = await screen.findByTestId("confirmation-debit-unknown");
+      expect(debit).toHaveTextContent(/pas encore pu être vérifié/);
+      expect(debit).toHaveAttribute("data-debit", "unknown");
+      expect(screen.getByTestId("confirmation-failed").textContent).not.toMatch(
+        /Aucun débit/,
+      );
+      // L'issue vers les autres chambres reste proposée.
+      expect(screen.getByTestId("confirmation-alternatives")).toBeVisible();
+    });
+
+    it("paiement non libéré, autorisation encore posée (503 + held) : retenue énoncée, « Réessayer »", async () => {
+      const { calls } = installBff({
+        [CONFIRM_URL]: [
+          failWith(503, { debit: ["held"] }),
+          failWith(503, { debit: ["held"] }),
+        ],
+      });
+      renderConfirmation();
+
+      const debit = await screen.findByTestId(
+        "confirmation-debit-held",
+        {},
+        { timeout: 4_000 },
+      );
+      expect(debit).toHaveTextContent(/réservé sur votre carte/);
+      expect(screen.getByTestId("confirmation-failed")).toHaveAttribute(
+        "data-reason",
+        "unavailable",
+      );
+      expect(screen.getByTestId("confirmation-failed").textContent).not.toMatch(
+        /Aucun débit/,
+      );
+      expect(screen.getByTestId("confirmation-retry")).toBeVisible();
+      expect(confirmCalls(calls).length).toBeGreaterThanOrEqual(1);
+    });
+
+    it("paiement non libéré, argent encaissé (503 + captured, AC-5) : le débit est dit", async () => {
+      installBff({
+        [CONFIRM_URL]: [
+          failWith(503, { debit: ["captured"] }),
+          failWith(503, { debit: ["captured"] }),
+        ],
+      });
+      renderConfirmation();
+
+      const debit = await screen.findByTestId(
+        "confirmation-debit-captured",
+        {},
+        { timeout: 4_000 },
+      );
+      expect(debit).toHaveTextContent(/encaissé/);
+      expect(screen.queryByTestId("confirmation-no-debit")).toBeNull();
+    });
+
+    it("503 sans statut de débit : débit non établi, jamais « aucun débit »", async () => {
+      installBff({ [CONFIRM_URL]: [fail(503), fail(503)] });
+      renderConfirmation();
+
+      await screen.findByTestId(
+        "confirmation-debit-unknown",
+        {},
+        { timeout: 4_000 },
+      );
+      expect(screen.queryByTestId("confirmation-no-debit")).toBeNull();
+    });
+
+    it("rendu anglais : statut de débit « non établi » traduit", async () => {
+      installBff({
+        [CONFIRM_URL]: [failWith(409, { reason: ["room-unavailable"] })],
+      });
+      renderConfirmation({ locale: "en" });
+
+      expect(
+        await screen.findByTestId("confirmation-debit-unknown"),
+      ).toHaveTextContent(/could not be verified yet/);
     });
 
     it("rendu anglais : titre, statut de débit et CTA traduits", async () => {

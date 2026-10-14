@@ -16,18 +16,25 @@ import {
 } from "@/services/booking.service";
 import { buildHotelPageUrl } from "@/services/catalog.service";
 import {
+  confirmDebitStatement,
   confirmFailureDebit,
   confirmFailureReason,
   RETRYABLE_CONFIRM_REASONS,
+  type ConfirmDebitStatement,
   type ConfirmDebitStatus,
   type ConfirmFailureReason,
 } from "@/services/payment.service";
 
-/** Clé i18n de l'énoncé de débit (#4, AC-8) : jamais « aucun débit » quand de l'argent a bougé. */
-const DEBIT_MESSAGE: Record<ConfirmDebitStatus, string> = {
+/**
+ * Clé i18n de l'énoncé de débit (#4, AC-8) : jamais « aucun débit » quand de l'argent a bougé, ni
+ * quand rien ne l'établit (`unknown`).
+ */
+const DEBIT_MESSAGE: Record<ConfirmDebitStatement, string> = {
   none: "noDebitKept",
   refunded: "refundIssued",
   captured: "debitCaptured",
+  held: "debitHeld",
+  unknown: "debitUnknown",
 };
 
 /** Motifs dont l'issue est l'hôtel (autres chambres), pas le récapitulatif de la chambre prise. */
@@ -40,8 +47,9 @@ const TO_ALTERNATIVES: ReadonlySet<ConfirmFailureReason> =
  * Déclenche la confirmation **une fois par montage** (`useConfirmReservation`), puis rend l'un des
  * trois états : `confirming`, `confirmed` (la preuve) ou `failed`.
  *
- * ⚠️ Un échec n'est **jamais un cul-de-sac** : motif humain, mention explicite qu'aucun débit n'a été
- * conservé, puis une issue — « Réessayer » pour les seuls motifs rejouables (`unavailable`,
+ * ⚠️ Un échec n'est **jamais un cul-de-sac** : motif humain, statut de débit explicite (#4 : aucun
+ * débit, remboursement, retenue, encaissement, ou « non encore vérifié », jamais déduit d'une
+ * absence d'information), puis une issue — « Réessayer » pour les seuls motifs rejouables (`unavailable`,
  * `unknown`, `capture-failed`), sinon une sortie (récapitulatif, reconnexion ou accueil).
  */
 export function BookingConfirmation({
@@ -104,7 +112,10 @@ function ConfirmationFailure({
   onRetry,
 }: {
   reason: ConfirmFailureReason;
-  /** Statut de débit établi par le BFF (#4) ; `null` : énoncé par défaut, « aucun débit ». */
+  /**
+   * Statut de débit établi par le BFF (#4) ; `null` : « aucun débit » seulement pour un motif qui le
+   * prouve, sinon énoncé « non établi ».
+   */
   debit: ConfirmDebitStatus | null;
   reservationId: string;
   context: ParsedBookingParams | null;
@@ -133,7 +144,7 @@ function ConfirmationFailure({
           currency: context.currency,
         })
       : null;
-  const debitStatus: ConfirmDebitStatus = debit ?? "none";
+  const debitStatus = confirmDebitStatement(reason, debit);
 
   return (
     <section
