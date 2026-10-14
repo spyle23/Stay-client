@@ -46,6 +46,12 @@ vi.mock("next-themes", () => ({
   useTheme: () => ({ resolvedTheme: "light" }),
 }));
 
+// Story 3.2 : l'autorisation conduit à la page de confirmation (`router.replace`).
+const routerReplace = vi.fn();
+vi.mock("next/navigation", () => ({
+  useRouter: () => ({ replace: routerReplace, push: vi.fn() }),
+}));
+
 const createPaymentIntent = vi.fn();
 vi.mock("@/services/payment.service", async () => {
   const actual = await vi.importActual<
@@ -337,6 +343,93 @@ describe("BookingPaymentForm", () => {
 
       const panel = await screen.findByTestId("payment-authorized");
       expect(panel.textContent ?? "").not.toMatch(/confirmée|e-?mail|QR|PDF/i);
+    });
+  });
+
+  describe("story 3.2 (AC-1) — l'autorisation conduit à la confirmation", () => {
+    const CONFIRMATION_URL = `/booking/confirmation?reservationId=${RESERVATION_ID}`;
+
+    it("retour direct (requires_capture) : navigation vers la confirmation", async () => {
+      renderForm();
+      await waitFor(() =>
+        expect(screen.getByTestId("payment-form")).toBeInTheDocument(),
+      );
+
+      fireEvent.submit(screen.getByTestId("payment-form"));
+
+      await waitFor(() =>
+        expect(routerReplace).toHaveBeenCalledWith(CONFIRMATION_URL),
+      );
+    });
+
+    it("rechargement d'une carte déjà retenue (sonde authorized) : même destination", async () => {
+      retrievePaymentIntent.mockResolvedValue({
+        paymentIntent: { status: "requires_capture" },
+      });
+      renderForm();
+
+      await waitFor(() =>
+        expect(routerReplace).toHaveBeenCalledWith(CONFIRMATION_URL),
+      );
+      expect(screen.queryByTestId("payment-submit")).not.toBeInTheDocument();
+    });
+
+    it("already-authorized (webhook reçu) : même destination, jamais un bandeau d'erreur", async () => {
+      const { ApiClientError } = await import("@/lib/api-client");
+      createPaymentIntent.mockRejectedValue(
+        new ApiClientError("…", 409, { reason: ["already-authorized"] }),
+      );
+      renderForm();
+
+      await waitFor(() =>
+        expect(routerReplace).toHaveBeenCalledWith(CONFIRMATION_URL),
+      );
+      expect(
+        screen.queryByTestId("payment-intent-error"),
+      ).not.toBeInTheDocument();
+    });
+
+    it("retour 3-DS par redirection : return_url pointe vers la confirmation", async () => {
+      renderForm();
+      await waitFor(() =>
+        expect(screen.getByTestId("payment-form")).toBeInTheDocument(),
+      );
+
+      fireEvent.submit(screen.getByTestId("payment-form"));
+
+      await waitFor(() => expect(confirmPayment).toHaveBeenCalled());
+      const [{ confirmParams }] = confirmPayment.mock.calls[0] as [
+        { confirmParams: { return_url: string } },
+      ];
+      const returnUrl = new URL(confirmParams.return_url);
+      expect(returnUrl.origin).toBe(window.location.origin);
+      expect(`${returnUrl.pathname}${returnUrl.search}`).toBe(CONFIRMATION_URL);
+    });
+
+    it("conserve le contexte de séjour jusqu'à la confirmation (sortie vers le récapitulatif)", async () => {
+      retrievePaymentIntent.mockResolvedValue({
+        paymentIntent: { status: "requires_capture" },
+      });
+      renderForm(
+        <BookingPaymentForm
+          reservationId={RESERVATION_ID}
+          params={{
+            hotelId: "3fa85f64-5717-4562-b3fc-2c963f66afa6",
+            roomId: "22222222-2222-4222-8222-222222222222",
+            checkInDate: "2099-09-01",
+            checkOutDate: "2099-09-03",
+            guests: 2,
+            currency: "EUR",
+          }}
+          expectedTotal={16_800}
+          expectedCurrency="EUR"
+        />,
+      );
+
+      await waitFor(() => expect(routerReplace).toHaveBeenCalled());
+      const target = String(routerReplace.mock.calls[0][0]);
+      expect(target.startsWith(CONFIRMATION_URL)).toBe(true);
+      expect(target).toContain("checkInDate=2099-09-01");
     });
   });
 

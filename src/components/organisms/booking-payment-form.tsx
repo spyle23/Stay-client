@@ -18,6 +18,7 @@ import type {
   Appearance,
   StripePaymentElementOptions,
 } from "@stripe/stripe-js";
+import { useRouter } from "next/navigation";
 import { useLocale, useTranslations } from "next-intl";
 import { useTheme } from "next-themes";
 import { LockIcon } from "lucide-react";
@@ -28,6 +29,8 @@ import { usePaymentIntent } from "@/hooks/use-payment-intent";
 import { isCurrencyExponentReliable } from "@/lib/currency";
 import { getStripe } from "@/lib/stripe";
 import { cn, formatCurrency } from "@/lib/utils";
+import type { ParsedBookingParams } from "@/lib/validations/booking";
+import { buildConfirmationUrl } from "@/services/booking.service";
 import {
   paymentFailureReason,
   RETRYABLE_PAYMENT_REASONS,
@@ -40,10 +43,11 @@ import {
  * ## Ce que cet écran fait, et ce qu'il ne fait PAS
  *
  * Il obtient une **autorisation** : les fonds sont retenus sur la carte, **rien n'est encaissé**.
- * La confirmation ferme (`Pending → Confirmed`), la capture, l'e-mail et le PDF/QR appartiennent à
- * la **story 3.2**. Cet écran ne doit donc jamais annoncer une réservation confirmée, un e-mail
- * envoyé, ni afficher un code ou un QR — c'est le défaut trouvé en Phase 3 de la story 2.3, et
- * l'AC-8 existe pour empêcher sa réédition.
+ * La confirmation ferme (`Pending → Confirmed`), la capture, l'e-mail et le PDF/QR vivent sur la
+ * **page de confirmation** (story 3.2) : dès qu'une autorisation est constatée — retour direct,
+ * retour 3-DS par `return_url`, ou rechargement d'une carte déjà retenue — l'écran y conduit. Il
+ * n'annonce donc jamais lui-même une réservation confirmée, un e-mail envoyé, un code ou un QR —
+ * c'est le défaut trouvé en Phase 3 de la story 2.3.
  *
  * ## Les données de carte ne passent jamais par nos serveurs
  *
@@ -69,6 +73,8 @@ type PaymentPhase =
 
 interface BookingPaymentFormProps {
   reservationId: string;
+  /** Contexte de séjour, conservé jusqu'à la confirmation (sortie vers le récapitulatif). */
+  params?: ParsedBookingParams;
   /** Total attendu, en unités mineures — sert de contrôle d'affichage, pas de source du montant. */
   expectedTotal: number;
   expectedCurrency: string;
@@ -76,10 +82,12 @@ interface BookingPaymentFormProps {
 
 export function BookingPaymentForm({
   reservationId,
+  params,
   expectedTotal,
   expectedCurrency,
 }: BookingPaymentFormProps) {
   const t = useTranslations("booking.payment");
+  const confirmationUrl = buildConfirmationUrl(reservationId, params);
 
   // Une requête, pas une mutation : voir `use-payment-intent.ts` — la clé de cache dédoublonne les
   // montages successifs, là où les callbacks d'une mutation pouvaient être perdus.
@@ -102,8 +110,15 @@ export function BookingPaymentForm({
   // recevait un bandeau `role="alert"` sans issue. Ce chemin ne se manifestait pas en Phase 3
   // parce que le webhook n'arrive pas sur un poste de développement : il est donc, en production,
   // le chemin NOMINAL du rechargement. Trouvé en revue de code 3.1.
+  // Story 3.2 (C9) : c'est aussi le chemin qui conduit à la confirmation — le laisser en écran
+  // statique reproduirait, sous une autre forme, le défaut central de la revue 3.1.
   if (failure === "already-authorized") {
-    return <PaymentAuthorized captureMethod="manual" />;
+    return (
+      <PaymentAuthorized
+        captureMethod="manual"
+        confirmationUrl={confirmationUrl}
+      />
+    );
   }
 
   const intentError = failure ?? (intent && !usable ? "unknown" : null);
@@ -143,6 +158,7 @@ export function BookingPaymentForm({
   return (
     <PayableGate
       intent={intent}
+      confirmationUrl={confirmationUrl}
       expectedTotal={expectedTotal}
       expectedCurrency={expectedCurrency}
     />
@@ -163,10 +179,12 @@ export function BookingPaymentForm({
  */
 function PayableGate({
   intent,
+  confirmationUrl,
   expectedTotal,
   expectedCurrency,
 }: {
   intent: PaymentIntentResult;
+  confirmationUrl: string;
   expectedTotal: number;
   expectedCurrency: string;
 }) {
@@ -223,7 +241,12 @@ function PayableGate({
   }
 
   if (probed === "authorized") {
-    return <PaymentAuthorized captureMethod={intent.captureMethod} />;
+    return (
+      <PaymentAuthorized
+        captureMethod={intent.captureMethod}
+        confirmationUrl={confirmationUrl}
+      />
+    );
   }
 
   if (probed === "unknown") {
@@ -242,6 +265,7 @@ function PayableGate({
     <StripeBoundary intent={intent}>
       <PaymentFormInner
         intent={intent}
+        confirmationUrl={confirmationUrl}
         expectedTotal={expectedTotal}
         expectedCurrency={expectedCurrency}
       />
@@ -250,24 +274,30 @@ function PayableGate({
 }
 
 /**
- * Écran d'autorisation obtenue.
+ * Autorisation obtenue — **état de transition** vers la page de confirmation (story 3.2, C9).
  *
- * ⚠️ AC-8 : « autorisé », **jamais** « confirmé ». Aucun code, aucun QR, aucun PDF, aucune mention
- * d'e-mail — la confirmation ferme est le périmètre de la story 3.2. Le défaut « confirmation
- * annoncée comme déjà envoyée » avait été trouvé en Phase 3 de la story 2.3 ; il ne doit pas se
- * rejouer ici sous une autre forme.
+ * ⚠️ « autorisé », **jamais** « confirmé » : aucun code, aucun QR, aucun PDF, aucune mention
+ * d'e-mail ici. C'est la page suivante qui dit « confirmée », **après** le retour du serveur. Le
+ * défaut « confirmation annoncée comme déjà envoyée » (Phase 3 de la story 2.3) ne doit pas se
+ * rejouer sous une autre forme.
+ *
+ * `replace` et non `push` : revenir en arrière ramènerait sur un formulaire qui n'a plus rien à payer.
  */
 function PaymentAuthorized({
   captureMethod,
+  confirmationUrl,
 }: {
   captureMethod: PaymentIntentResult["captureMethod"];
+  confirmationUrl: string;
 }) {
   const t = useTranslations("booking.payment");
+  const router = useRouter();
   const ref = useRef<HTMLDivElement | null>(null);
 
   useEffect(() => {
     ref.current?.focus();
-  }, []);
+    router.replace(confirmationUrl);
+  }, [router, confirmationUrl]);
 
   return (
     <div
@@ -329,10 +359,12 @@ function StripeBoundary({
 
 function PaymentFormInner({
   intent,
+  confirmationUrl,
   expectedTotal,
   expectedCurrency,
 }: {
   intent: PaymentIntentResult;
+  confirmationUrl: string;
   expectedTotal: number;
   expectedCurrency: string;
 }) {
@@ -421,9 +453,9 @@ function PaymentFormInner({
       const { error, paymentIntent } = await stripe.confirmPayment({
         elements,
         confirmParams: {
-          // Retour sur l'écran de paiement lui-même : la confirmation ferme n'existe pas encore
-          // (story 3.2). Pointer vers une page de confirmation serait une promesse fausse.
-          return_url: window.location.href,
+          // Story 3.2 : un moyen qui exige une redirection (3-DS hors modale) revient directement
+          // sur la page de confirmation, qui converge avec le retour direct.
+          return_url: new URL(confirmationUrl, window.location.origin).href,
         },
         // `if_required` garde la carte SUR la page ; seuls les moyens qui l'exigent partent en
         // redirection. La 3-D Secure s'ouvre alors en modale Stripe, sans quitter le tunnel.
@@ -460,7 +492,7 @@ function PaymentFormInner({
           setMessage(t("errors.rejected.body"));
       }
     },
-    [stripe, elements, busy, phase, t],
+    [stripe, elements, busy, phase, t, confirmationUrl],
   );
 
   // ⚠️ Tant que Stripe.js n'a pas fini de charger, on n'affiche PAS le formulaire avec un bouton
@@ -531,7 +563,12 @@ function PaymentFormInner({
   }
 
   if (phase === "authorized") {
-    return <PaymentAuthorized captureMethod={intent.captureMethod} />;
+    return (
+      <PaymentAuthorized
+        captureMethod={intent.captureMethod}
+        confirmationUrl={confirmationUrl}
+      />
+    );
   }
 
   // ⚠️ C9 : ne JAMAIS proposer de payer un montant qui ne peut pas être vérifié. Ces deux gardes ne

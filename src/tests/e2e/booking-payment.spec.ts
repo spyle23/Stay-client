@@ -1,6 +1,8 @@
 import { test, expect, type Page, type Route } from "@playwright/test";
 import AxeBuilder from "@axe-core/playwright";
 
+import { mockConfirmation } from "./helpers/mock-confirmation";
+
 const HOTEL_ID = "3fa85f64-5717-4562-b3fc-2c963f66afa6";
 const ROOM_ID = "22222222-2222-4222-8222-222222222222";
 const OTHER_ROOM_ID = "44444444-4444-4444-8444-444444444444";
@@ -1359,13 +1361,24 @@ test.describe("paiement — demande d'intent (story 3.1)", () => {
         errors: { reason: ["already-authorized"] },
       },
     });
+    // Story 3.2 : la page de confirmation confirme puis charge le QR. Déclarées APRÈS `mockBff` :
+    // la route des réservations (`…/reservations**`) capterait sinon le QR.
+    const confirmation = await mockConfirmation(page, RESERVATION_ID);
+    const errors: string[] = [];
+    page.on("pageerror", (err) => errors.push(err.message));
+
     await page.goto(paymentUrl({ reservationId: RESERVATION_ID }));
 
-    // ⚠️ Corrigé en revue de code : « paiement déjà engagé » veut dire que la carte porte une
-    // retenue. L'écran doit donc rendre l'ÉTAT « autorisé », pas une alerte — et surtout ne pas
-    // reproposer de payer.
-    await expect(page.getByTestId("payment-authorized")).toBeVisible();
+    // ⚠️ Corrigé en revue de code (3.1) : « paiement déjà engagé » veut dire que la carte porte une
+    // retenue — jamais une alerte, jamais une seconde invitation à payer. Story 3.2 (AC-1) : c'est le
+    // chemin NOMINAL du rechargement en production, il conduit donc à la confirmation.
+    await expect(page).toHaveURL(
+      new RegExp(`/booking/confirmation\\?reservationId=${RESERVATION_ID}`),
+    );
+    await expect(page.getByTestId("confirmation-proof")).toBeVisible();
     await expect(page.getByTestId("payment-intent-error")).toHaveCount(0);
     await expect(page.getByTestId("payment-submit")).toHaveCount(0);
+    expect(confirmation.confirmCalls).toHaveLength(1);
+    expect(errors).toEqual([]);
   });
 });
