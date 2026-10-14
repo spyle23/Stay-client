@@ -506,7 +506,7 @@
       "errors": {
         "payment-not-authorized": {
           "title": "Paiement non autorisé",
-          "body": "Le paiement de cette réservation n'a pas été autorisé par votre banque : nous ne pouvons pas la confirmer."
+          "body": "Aucun paiement autorisé n'a été trouvé pour cette réservation : nous ne pouvons pas la confirmer. Reprenez le paiement depuis le récapitulatif."
         },
         "amount-mismatch": {
           "title": "Montant différent du total dû",

@@ -506,7 +506,7 @@
       "errors": {
         "payment-not-authorized": {
           "title": "Payment not authorised",
-          "body": "Your bank did not authorise the payment for this booking, so we cannot confirm it."
+          "body": "We found no authorised payment for this booking, so we cannot confirm it. Please resume payment from the summary."
         },
         "amount-mismatch": {
           "title": "Amount differs from the total due",
