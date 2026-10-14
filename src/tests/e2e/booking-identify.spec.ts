@@ -377,8 +377,11 @@ test.describe("Identification invité ou compte (isolé, BFF mocké)", () => {
     await page.getByTestId("guest-submit").click();
     await expect(page.getByTestId("guest-email-conflict")).toBeVisible();
 
-    const focused = await page.evaluate(() => document.activeElement?.tagName);
-    expect(focused).not.toBe("BODY");
+    // Le repli du focus attend la peinture (`requestAnimationFrame`) : l'alerte peut être visible
+    // une image plus tôt. Assertion réessayée, sinon la lecture immédiate est une course (#178).
+    await expect
+      .poll(() => page.evaluate(() => document.activeElement?.tagName))
+      .not.toBe("BODY");
   });
 
   test("« utiliser une autre adresse » redonne le focus au champ email", async ({
