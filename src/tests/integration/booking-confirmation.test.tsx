@@ -408,6 +408,52 @@ describe("BookingConfirmation", () => {
       expect(confirmCalls(calls)).toHaveLength(3);
     });
 
+    /**
+     * #183 AC-2 — hold expiré et paiement non vérifiable pour l'instant : motif distinct et
+     * rejouable, texte honnête, jamais « aucun paiement autorisé » ni « aucun débit ».
+     */
+    it.each(["fr", "en"] as const)(
+      "payment-verification-pending (%s) : un essai automatique, « vérification en cours », « Réessayer »",
+      async (locale) => {
+        const { calls } = installBff({
+          [CONFIRM_URL]: [
+            fail(503, "payment-verification-pending"),
+            fail(503, "payment-verification-pending"),
+            ok(proof()),
+          ],
+          [QR_URL]: [{ status: 200, blob: PNG }],
+        });
+        renderConfirmation({ locale });
+
+        const panel = await screen.findByTestId(
+          "confirmation-failed",
+          {},
+          { timeout: 4_000 },
+        );
+        expect(panel).toHaveAttribute(
+          "data-reason",
+          "payment-verification-pending",
+        );
+        expect(confirmCalls(calls)).toHaveLength(2);
+        const messages = locale === "fr" ? frMessages : enMessages;
+        const copy =
+          messages.booking.confirmation.errors["payment-verification-pending"];
+        expect(panel).toHaveTextContent(copy.title);
+        expect(panel).toHaveTextContent(copy.body);
+        expect(panel.textContent).not.toMatch(
+          /Aucun paiement autorisé|no authorised payment|Reprenez le paiement|resume payment|Aucun débit n'a été conservé|No charge has been kept/i,
+        );
+        expect(screen.getByTestId("confirmation-debit-unknown")).toBeVisible();
+        expect(screen.queryByTestId("confirmation-no-debit")).toBeNull();
+        expect(screen.queryByTestId("confirmation-recap")).toBeNull();
+
+        fireEvent.click(screen.getByTestId("confirmation-retry"));
+
+        expect(await screen.findByTestId("confirmation-proof")).toBeVisible();
+        expect(confirmCalls(calls)).toHaveLength(3);
+      },
+    );
+
     it.each([
       ["payment-not-authorized", "confirmation-no-debit"],
       ["amount-mismatch", "confirmation-no-debit"],

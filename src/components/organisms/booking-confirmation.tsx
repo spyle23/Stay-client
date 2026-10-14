@@ -50,7 +50,8 @@ const TO_ALTERNATIVES: ReadonlySet<ConfirmFailureReason> =
  * ⚠️ Un échec n'est **jamais un cul-de-sac** : motif humain, statut de débit explicite (#4 : aucun
  * débit, remboursement, retenue, encaissement, ou « non encore vérifié », jamais déduit d'une
  * absence d'information), puis une issue — « Réessayer » pour les seuls motifs rejouables (`unavailable`,
- * `unknown`, `capture-failed`), sinon une sortie (récapitulatif, reconnexion ou accueil).
+ * `unknown`, `capture-failed`, `payment-verification-pending`), sinon une sortie (récapitulatif,
+ * reconnexion ou accueil).
  */
 export function BookingConfirmation({
   reservationId,

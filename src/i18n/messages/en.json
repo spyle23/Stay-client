@@ -554,6 +554,10 @@
           "title": "Confirmation interrupted",
           "body": "An unexpected error interrupted the confirmation. Please try again in a moment."
         },
+        "payment-verification-pending": {
+          "title": "Payment check in progress",
+          "body": "We could not check the payment for this booking yet. Try again in a moment, without paying again."
+        },
         "room-unavailable": {
           "title": "Room no longer available",
           "body": "This room has just been booked for your dates: your booking could not be confirmed. Other rooms at the hotel may still be free for the same stay."

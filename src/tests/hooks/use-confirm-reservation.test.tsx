@@ -94,6 +94,24 @@ describe("useConfirmReservation", () => {
     expect(confirmReservation).toHaveBeenCalledTimes(2);
   });
 
+  it("#183 : paiement en cours de vérification → un nouvel essai automatique, différé", async () => {
+    confirmReservation
+      .mockRejectedValueOnce(
+        new ApiClientError("…", 503, {
+          reason: ["payment-verification-pending"],
+        }),
+      )
+      .mockResolvedValueOnce(PROOF);
+    const { result } = renderHook(() => useConfirmReservation(RESERVATION_ID), {
+      wrapper: wrapper(false),
+    });
+
+    await waitFor(() => expect(result.current.status).toBe("confirmed"), {
+      timeout: 4_000,
+    });
+    expect(confirmReservation).toHaveBeenCalledTimes(2);
+  });
+
   it("retry() relance explicitement la confirmation", async () => {
     confirmReservation
       .mockRejectedValueOnce(

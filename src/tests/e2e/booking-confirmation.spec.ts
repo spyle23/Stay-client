@@ -273,6 +273,41 @@ test.describe("Confirmation ferme (story 3.2)", () => {
     await expect(page.getByTestId("confirmation-alternatives")).toBeVisible();
   });
 
+  test("#183 AC-2 : hold expiré, paiement non vérifié — « vérification en cours », jamais « aucun paiement autorisé », puis « Réessayer » aboutit", async ({
+    page,
+  }) => {
+    const mock = await openConfirmation(page, {
+      sequence: [
+        { status: 503, reason: "payment-verification-pending" },
+        { status: 503, reason: "payment-verification-pending" },
+        {},
+      ],
+    });
+
+    const panel = page.getByTestId("confirmation-failed");
+    await expect(panel).toHaveAttribute(
+      "data-reason",
+      "payment-verification-pending",
+    );
+    await expect(panel).toContainText("Vérification du paiement en cours");
+    await expect(panel).not.toContainText("Aucun paiement autorisé");
+    await expect(panel).not.toContainText("Reprenez le paiement");
+    await expect(page.getByTestId("confirmation-no-debit")).toHaveCount(0);
+    await expect(page.getByTestId("confirmation-debit-unknown")).toBeVisible();
+    await expect(page.getByTestId("confirmation-recap")).toHaveCount(0);
+    // Contraste AA du panneau d'échec (motif nouveau, même gabarit).
+    const audit = await new AxeBuilder({ page })
+      .include("[data-testid='confirmation-failed']")
+      .withTags(WCAG_TAGS)
+      .analyze();
+    expect(audit.violations).toEqual([]);
+
+    await page.getByTestId("confirmation-retry").click();
+
+    await expect(page.getByTestId("confirmation-proof")).toBeVisible();
+    expect(mock.confirmCalls).toHaveLength(3);
+  });
+
   test("#4 AC-8 : paiement non libéré (503, retenue posée) — retenue énoncée, puis « Réessayer » aboutit", async ({
     page,
   }) => {

@@ -4,6 +4,7 @@ import { useCallback, useEffect, useRef } from "react";
 import { useMutation, useMutationState } from "@tanstack/react-query";
 
 import {
+  AUTO_RETRY_CONFIRM_REASONS,
   confirmFailureReason,
   confirmReservation,
   paymentKeys,
@@ -39,8 +40,9 @@ export interface ConfirmReservationState {
  * réponse était arrivée. L'état est donc lu par `useMutationState` (clé de mutation), qui suit le
  * cache lui-même, quel que soit l'observateur qui a lancé l'appel.
  *
- * Un nouvel essai automatique, différé, sur une panne seulement (`unavailable`, `unknown`) : l'appel
- * est idempotent par contrat. Un refus déterministe ne se rejoue pas.
+ * Un nouvel essai automatique, différé, sur une panne ou un paiement pas encore vérifiable
+ * (`unavailable`, `unknown`, `payment-verification-pending`, #183) : l'appel est idempotent par
+ * contrat. Un refus déterministe ne se rejoue pas.
  */
 export function useConfirmReservation(
   reservationId: string,
@@ -51,9 +53,9 @@ export function useConfirmReservation(
     mutationKey,
     mutationFn: (id) => confirmReservation(id),
     retry: (failureCount, error) => {
-      const reason = confirmFailureReason(error);
       return (
-        failureCount < 1 && (reason === "unavailable" || reason === "unknown")
+        failureCount < 1 &&
+        AUTO_RETRY_CONFIRM_REASONS.has(confirmFailureReason(error))
       );
     },
     retryDelay: RETRY_DELAY_MS,
