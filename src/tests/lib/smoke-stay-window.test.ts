@@ -104,5 +104,7 @@ describe("paidStayOffset", () => {
     expect(low(0)).toBe(PAID_FIRST_DAY);
     expect(high(0) + STAY_NIGHTS).toBeLessThanOrEqual(low(1));
     expect(low(1) - low(0)).toBe(PAID_SLOT_BAND_DAYS);
+    // Slot 2 : réconciliation (#5), disjoint du rechargement.
+    expect(high(1) + STAY_NIGHTS).toBeLessThanOrEqual(low(2));
   });
 });

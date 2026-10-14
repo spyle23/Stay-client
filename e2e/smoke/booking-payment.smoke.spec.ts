@@ -924,3 +924,96 @@ test(
     await expectQrLoaded(page);
   },
 );
+
+/** BFF du stack Phase 3 : la réservation se relit par lui, jamais par le PMS. */
+const BFF_URL = process.env.SMOKE_BFF_URL ?? "http://localhost:4000";
+
+/**
+ * Période de la réconciliation du BFF (`PAYMENT_RECONCILE_INTERVAL_MS`, défaut 60 s). Le smoke ne
+ * lit pas la configuration du BFF : un stack lancé avec une autre période la passe ici.
+ */
+const RECONCILE_INTERVAL_MS = Number(
+  process.env.SMOKE_RECONCILE_INTERVAL_MS ?? 60_000,
+);
+
+/**
+ * Story 3.4 (#5, AC-9) — **filet d'intégrité** : la confirmation du navigateur n'arrive jamais.
+ *
+ * Le paiement est autorisé pour de vrai (Stripe en mode test), puis TOUTE confirmation du navigateur
+ * est bloquée (`page.route` en `abort`) : la réservation reste `Pending`, carte retenue, comme après
+ * un onglet fermé ou un BFF tombé. Sans aucune action du voyageur, le job de réconciliation du BFF
+ * doit relire la réservation et son paiement par les routes de service du PMS (#153), puis rejouer
+ * la confirmation sous `X-Service-Key` : la réservation, relue par le BFF, passe `Confirmed` en
+ * moins de 2 × la période + 30 s, et l'e-mail « Confirmée » part au voyageur.
+ *
+ * ⚠️ Aucun rechargement ni « Réessayer » : seul le job peut confirmer ici.
+ */
+test(
+  "Confirmation du navigateur perdue : la réconciliation confirme d’elle-même",
+  STRIPE_EXTERNAL,
+  async ({ page }) => {
+    const budgetMs = 2 * RECONCILE_INTERVAL_MS + 30_000;
+    // Parcours et autorisation réels (≈ 2 min au pire), le budget du job, puis l'e-mail.
+    test.setTimeout(budgetMs + 240_000);
+    const email = `smoke-reconcile-${Date.now()}@example.com`;
+
+    await goToPayment(page, email, paidStayOffset(2));
+    await page.getByTestId("payment-create-cta").click();
+    await expect(page.getByTestId("payment-reservation-code")).toBeVisible({
+      timeout: 20_000,
+    });
+    await expect(page).toHaveURL(/reservationId=/, { timeout: 20_000 });
+    const reservationId = new URL(page.url()).searchParams.get("reservationId");
+    expect(reservationId).toMatch(/^[0-9a-f-]{36}$/i);
+
+    await expect(page.getByTestId("payment-form")).toBeVisible({
+      timeout: 30_000,
+    });
+    await fillTestCard(page);
+
+    // Toute confirmation du navigateur échoue avant d'atteindre le BFF, jusqu'à la fin du test.
+    await page.route(CONFIRM_ROUTE, (route) => route.abort("failed"));
+    await submitPayment(page);
+
+    // L'autorisation a abouti (la page de confirmation est atteinte), la confirmation non.
+    await expect(page).toHaveURL(/\/booking\/confirmation\?/, {
+      timeout: 60_000,
+    });
+    await expect(page.getByTestId("confirmation-failed")).toBeVisible({
+      timeout: 30_000,
+    });
+    const authorizedAt = Date.now();
+    const confirmedSince = new Date(authorizedAt);
+
+    const statusOf = async (): Promise<string> => {
+      const res = await page.request.get(
+        `${BFF_URL}/api/v1/booking/reservations/${reservationId}`,
+      );
+      if (!res.ok()) return `HTTP ${res.status()}`;
+      const body = (await res.json()) as { data?: { status?: string } };
+      return body.data?.status ?? "inconnu";
+    };
+    // Toujours en attente juste après : seul le job peut la confirmer.
+    expect(await statusOf()).toBe("Pending");
+
+    await expect
+      .poll(statusOf, { timeout: budgetMs, intervals: [5_000] })
+      .toBe("Confirmed");
+    expect(Date.now() - authorizedAt).toBeLessThan(budgetMs);
+
+    // L'e-mail « Confirmée » du PMS (outbox puis job Hangfire), lu dans le capteur SMTP.
+    await expect
+      .poll(
+        async () => {
+          const mail = await lastMail({
+            to: email,
+            since: confirmedSince,
+            timeoutMs: 5_000,
+          }).catch(() => null);
+          return mail?.subject ?? "";
+        },
+        { timeout: 90_000, intervals: [2_000] },
+      )
+      .toMatch(/confirm/i);
+  },
+);
