@@ -2,6 +2,8 @@ import { defineConfig, devices } from "@playwright/test";
 
 import { resolveE2EPort } from "./e2e/web-port";
 import { E2E_PROD_DIST_DIR } from "./e2e/prod-build";
+import { chromiumLaunchOptions } from "./e2e/launch-options";
+import { resolveE2EWorkers } from "./e2e/workers";
 
 /**
  * Config e2e isolée **en production** (spyle23/hotelerie#148).
@@ -25,11 +27,14 @@ export default defineConfig({
   fullyParallel: false,
   forbidOnly: !!process.env.CI,
   retries: 0,
-  workers: 1,
+  // `E2E_WORKERS` (budget des portes, #178) : jamais au-delà de 1.
+  workers: resolveE2EWorkers(1),
   reporter: "list",
   use: {
     baseURL: WEB_URL,
     trace: "retain-on-failure",
+    // Sans GPU (#178) : écran bleu sous la charge des runs parallèles.
+    launchOptions: chromiumLaunchOptions(),
   },
   projects: [{ name: "chromium", use: { ...devices["Desktop Chrome"] } }],
   webServer: {

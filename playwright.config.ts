@@ -1,6 +1,8 @@
 import { defineConfig, devices } from "@playwright/test";
 
+import { chromiumLaunchOptions } from "./e2e/launch-options";
 import { resolveE2EPort } from "./e2e/web-port";
+import { resolveE2EWorkers } from "./e2e/workers";
 
 /**
  * Port du serveur web lu depuis `E2E_PORT` (défaut 3000, spyle23/hotelerie#106) : un worktree de
@@ -25,12 +27,15 @@ export default defineConfig({
    * qui n'ont rien à voir avec le code testé (constaté en ajoutant les routes du tunnel).
    * Borner les workers rend la suite déterministe **sans** relâcher les timeouts d'assertion, et
    * s'avère même plus rapide (moins de contention). En CI, Playwright reste libre de s'adapter.
+   * `E2E_WORKERS` (budget des portes, #178) abaisse ce plafond, CI comprise.
    */
-  workers: process.env.CI ? undefined : 4,
+  workers: resolveE2EWorkers(process.env.CI ? undefined : 4),
   reporter: "list",
   use: {
     baseURL: WEB_URL,
     trace: "on-first-retry",
+    // Sans GPU (#178) : écran bleu sous la charge des runs parallèles.
+    launchOptions: chromiumLaunchOptions(),
   },
   projects: [{ name: "chromium", use: { ...devices["Desktop Chrome"] } }],
   webServer: {

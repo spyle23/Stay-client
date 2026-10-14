@@ -135,6 +135,18 @@ export function BookingIdentify({
     };
   }, []);
 
+  // Repli du focus après la bascule automatique (collision) : posé par le handler, consommé une
+  // fois l'onglet compte **rendu**. Un `requestAnimationFrame` lancé depuis le handler pouvait
+  // précéder ce rendu sous charge : panneau absent, focus resté sur `<body>` (#178).
+  const pendingAccountFocus = useRef(false);
+  useEffect(() => {
+    if (tab !== "account" || !pendingAccountFocus.current) {
+      return;
+    }
+    pendingAccountFocus.current = false;
+    focusAfterPaint(() => accountPanelRef.current?.focus());
+  }, [tab, conflictEmail]);
+
   // Handler défini séparément, puis passé à `handleSubmit` **au moment de la soumission** : appeler
   // `handleSubmit(fn)` pendant le rendu donnerait à lire le garde de montage à une closure que le
   // compilateur React ne peut pas prouver hors-rendu (`react-hooks/refs`).
@@ -168,11 +180,12 @@ export function BookingIdentify({
             goToPayment();
             return;
           }
+          // Le panneau invité va être démonté (`keepMounted: false`) : l'élément focalisé — le
+          // bouton de soumission — disparaît et le focus retomberait sur `<body>`. Le panneau
+          // compte le reçoit une fois rendu (effet ci-dessus).
+          pendingAccountFocus.current = true;
           setConflictEmail(identity.email);
           setTab("account");
-          // Le panneau invité vient d'être démonté (`keepMounted: false`) : l'élément focalisé —
-          // le bouton de soumission — a disparu et le focus retomberait sur `<body>`.
-          focusAfterPaint(() => accountPanelRef.current?.focus());
           return;
         }
         if (mounted.current) {

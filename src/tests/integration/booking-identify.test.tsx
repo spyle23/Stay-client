@@ -594,6 +594,33 @@ describe("BookingIdentify (intégration — story 2.3)", () => {
     expect(error).not.toHaveTextContent(frMessages.auth.guestErrorGeneric);
   });
 
+  /**
+   * Régression (#178) : le repli du focus partait dans un `requestAnimationFrame` lancé avant le
+   * rendu de l'onglet compte. Sous charge, l'image pouvait précéder ce rendu : le panneau n'existait
+   * pas encore et le focus restait sur `<body>` (e2e intermittent). Ici, l'image passe aussitôt.
+   */
+  it("collision : le focus va au panneau compte même si l’image précède son rendu", async () => {
+    vi.stubGlobal("requestAnimationFrame", (cb: FrameRequestCallback) => {
+      cb(0);
+      return 0;
+    });
+    stubFetch({
+      guest: () => json({ success: false, message: "conflit" }, 409),
+    });
+    renderIdentify();
+    await fillGuestForm();
+
+    fireEvent.click(screen.getByTestId("guest-submit"));
+    const conflict = await screen.findByTestId("guest-email-conflict");
+
+    await waitFor(() =>
+      expect(document.activeElement).toBe(
+        conflict.closest('[role="tabpanel"]'),
+      ),
+    );
+    expect(document.activeElement).not.toBe(document.body);
+  });
+
   it("changer d’onglet à la main efface l’alerte de collision périmée", async () => {
     stubFetch({
       guest: () => json({ success: false, message: "conflit" }, 409),
