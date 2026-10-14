@@ -8,8 +8,10 @@ import {
   fetchConfirmationQr,
 } from "@/services/booking.service";
 import {
+  confirmFailureDebit,
   confirmFailureReason,
   confirmReservation,
+  type ConfirmDebitStatus,
   PAYMENT_ENDPOINTS,
   paymentKeys,
   RETRYABLE_CONFIRM_REASONS,
@@ -72,6 +74,7 @@ describe("confirmation — services", () => {
       "authorisation-expired",
       "reservation-not-found",
       "reservation-cancelled",
+      "room-unavailable",
       "not-owner",
       "session-invalid",
       "rejected",
@@ -105,6 +108,38 @@ describe("confirmation — services", () => {
       expect(confirmFailureReason(new TypeError("Failed to fetch"))).toBe(
         "unknown",
       );
+    });
+  });
+
+  describe("confirmFailureDebit (#4, AC-8)", () => {
+    it.each<ConfirmDebitStatus>(["none", "refunded", "captured"])(
+      "lit le statut de débit %s dans errors.debit",
+      (debit) => {
+        expect(
+          confirmFailureDebit(
+            new ApiClientError("…", 409, {
+              reason: ["room-unavailable"],
+              debit: [debit],
+            }),
+          ),
+        ).toBe(debit);
+      },
+    );
+
+    it("absent, inconnu ou hors BFF → null, jamais deviné", () => {
+      expect(
+        confirmFailureDebit(
+          new ApiClientError("…", 409, { reason: ["room-unavailable"] }),
+        ),
+      ).toBeNull();
+      expect(
+        confirmFailureDebit(new ApiClientError("…", 409, { debit: ["maybe"] })),
+      ).toBeNull();
+      expect(confirmFailureDebit(new TypeError("Failed to fetch"))).toBeNull();
+    });
+
+    it("room-unavailable n’est jamais rejouable (la réservation est annulée)", () => {
+      expect(RETRYABLE_CONFIRM_REASONS.has("room-unavailable")).toBe(false);
     });
   });
 

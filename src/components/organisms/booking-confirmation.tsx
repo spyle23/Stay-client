@@ -14,11 +14,25 @@ import {
   buildConfirmationUrl,
   buildRecapUrl,
 } from "@/services/booking.service";
+import { buildHotelPageUrl } from "@/services/catalog.service";
 import {
+  confirmFailureDebit,
   confirmFailureReason,
   RETRYABLE_CONFIRM_REASONS,
+  type ConfirmDebitStatus,
   type ConfirmFailureReason,
 } from "@/services/payment.service";
+
+/** Clé i18n de l'énoncé de débit (#4, AC-8) : jamais « aucun débit » quand de l'argent a bougé. */
+const DEBIT_MESSAGE: Record<ConfirmDebitStatus, string> = {
+  none: "noDebitKept",
+  refunded: "refundIssued",
+  captured: "debitCaptured",
+};
+
+/** Motifs dont l'issue est l'hôtel (autres chambres), pas le récapitulatif de la chambre prise. */
+const TO_ALTERNATIVES: ReadonlySet<ConfirmFailureReason> =
+  new Set<ConfirmFailureReason>(["room-unavailable"]);
 
 /**
  * Île cliente de la page de confirmation (story 3.2, C7 / AC-1, AC-6, AC-10, AC-11).
@@ -48,6 +62,7 @@ export function BookingConfirmation({
     return (
       <ConfirmationFailure
         reason={confirmFailureReason(state.error)}
+        debit={confirmFailureDebit(state.error)}
         reservationId={reservationId}
         context={context}
         onRetry={state.retry}
@@ -83,11 +98,14 @@ function ConfirmationPending() {
 
 function ConfirmationFailure({
   reason,
+  debit,
   reservationId,
   context,
   onRetry,
 }: {
   reason: ConfirmFailureReason;
+  /** Statut de débit établi par le BFF (#4) ; `null` : énoncé par défaut, « aucun débit ». */
+  debit: ConfirmDebitStatus | null;
   reservationId: string;
   context: ParsedBookingParams | null;
   onRetry: () => void;
@@ -104,6 +122,18 @@ function ConfirmationFailure({
   const retryable = RETRYABLE_CONFIRM_REASONS.has(reason);
   // Retour ici après reconnexion : la confirmation se rejoue (idempotente) et rend la preuve.
   const here = buildConfirmationUrl(reservationId, context ?? undefined);
+  // #4 AC-7 : la chambre est prise ; l'issue est l'hôtel, pour les mêmes dates et voyageurs.
+  const toAlternatives = TO_ALTERNATIVES.has(reason);
+  const alternativesUrl =
+    toAlternatives && context
+      ? buildHotelPageUrl(context.hotelId, null, {
+          checkInDate: context.checkInDate,
+          checkOutDate: context.checkOutDate,
+          guests: context.guests,
+          currency: context.currency,
+        })
+      : null;
+  const debitStatus: ConfirmDebitStatus = debit ?? "none";
 
   return (
     <section
@@ -120,11 +150,29 @@ function ConfirmationFailure({
         {t(`errors.${reason}.title`)}
       </h1>
       <p className="text-body">{t(`errors.${reason}.body`)}</p>
-      <p className="text-small font-medium" data-testid="confirmation-no-debit">
-        {t("noDebitKept")}
+      <p
+        className="text-small font-medium"
+        data-testid={
+          debitStatus === "none"
+            ? "confirmation-no-debit"
+            : `confirmation-debit-${debitStatus}`
+        }
+        data-debit={debitStatus}
+      >
+        {t(DEBIT_MESSAGE[debitStatus])}
       </p>
 
       <div className="flex flex-wrap gap-2">
+        {alternativesUrl ? (
+          <Link
+            href={alternativesUrl}
+            className={cn(buttonVariants(), "min-h-(--tap-min)")}
+            data-testid="confirmation-alternatives"
+          >
+            {t("alternativesCta")}
+          </Link>
+        ) : null}
+
         {retryable ? (
           <Button
             type="button"
@@ -150,7 +198,7 @@ function ConfirmationFailure({
           </Link>
         ) : null}
 
-        {!retryable && context ? (
+        {!retryable && !toAlternatives && context ? (
           <Link
             href={buildRecapUrl(context)}
             className={cn(

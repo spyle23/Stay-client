@@ -472,6 +472,115 @@ describe("BookingConfirmation", () => {
     });
   });
 
+  /**
+   * #4 (story 3.3) AC-7 / AC-8 — chambre devenue indisponible avant la capture : statut de débit
+   * énoncé d'après le BFF, et une issue vers les chambres disponibles de l'hôtel pour le même séjour.
+   */
+  describe("#4 — chambre indisponible et statut de débit", () => {
+    const failWith = (
+      status: number,
+      errors: Record<string, string[]>,
+    ): Reply => ({
+      status,
+      body: { success: false, message: "Texte technique du BFF", errors },
+    });
+
+    it("room-unavailable : « aucun débit », CTA vers les chambres de l’hôtel, mêmes dates et voyageurs", async () => {
+      installBff({
+        [CONFIRM_URL]: [
+          failWith(409, { reason: ["room-unavailable"], debit: ["none"] }),
+        ],
+      });
+      renderConfirmation();
+
+      const panel = await screen.findByTestId("confirmation-failed");
+      expect(panel).toHaveAttribute("data-reason", "room-unavailable");
+      expect(panel).toHaveTextContent("Chambre plus disponible");
+      expect(screen.getByTestId("confirmation-no-debit")).toHaveTextContent(
+        /Aucun débit n'a été conservé/,
+      );
+      expect(screen.queryByTestId("confirmation-retry")).toBeNull();
+      // Le récapitulatif ramènerait sur la chambre prise : l'issue est l'hôtel, pas la même chambre.
+      expect(screen.queryByTestId("confirmation-recap")).toBeNull();
+
+      const cta = screen.getByTestId("confirmation-alternatives");
+      const href = new URL(cta.getAttribute("href")!, "http://localhost");
+      expect(href.pathname).toBe(`/hotels/${CONTEXT.hotelId}`);
+      expect(href.searchParams.get("checkInDate")).toBe(CONTEXT.checkInDate);
+      expect(href.searchParams.get("checkOutDate")).toBe(CONTEXT.checkOutDate);
+      expect(href.searchParams.get("guests")).toBe("2");
+      expect(href.searchParams.get("currency")).toBe("EUR");
+      expect(screen.getByTestId("confirmation-home")).toHaveAttribute(
+        "href",
+        "/",
+      );
+      expect(panel.textContent).not.toContain("Texte technique");
+    });
+
+    it("AC-5 : remboursement émis → « remboursement intégral émis », jamais « aucun débit »", async () => {
+      installBff({
+        [CONFIRM_URL]: [
+          failWith(409, { reason: ["room-unavailable"], debit: ["refunded"] }),
+        ],
+      });
+      renderConfirmation();
+
+      const debit = await screen.findByTestId("confirmation-debit-refunded");
+      expect(debit).toHaveTextContent(/Remboursement intégral émis/);
+      expect(screen.queryByTestId("confirmation-no-debit")).toBeNull();
+      expect(screen.getByTestId("confirmation-failed").textContent).not.toMatch(
+        /Aucun débit/,
+      );
+    });
+
+    it("annulée avec un montant encaissé : le débit est dit, avec une issue (contacter l’hôtel)", async () => {
+      installBff({
+        [CONFIRM_URL]: [
+          failWith(409, {
+            reason: ["reservation-cancelled"],
+            debit: ["captured"],
+          }),
+        ],
+      });
+      renderConfirmation();
+
+      const debit = await screen.findByTestId("confirmation-debit-captured");
+      expect(debit).toHaveTextContent(/encaissé/);
+      expect(screen.queryByTestId("confirmation-no-debit")).toBeNull();
+      expect(screen.getByTestId("confirmation-home")).toBeVisible();
+    });
+
+    it("sans contexte de séjour : pas de CTA d’alternatives inventé, l’accueil reste", async () => {
+      installBff({
+        [CONFIRM_URL]: [failWith(409, { reason: ["room-unavailable"] })],
+      });
+      renderConfirmation({ context: null });
+
+      await screen.findByTestId("confirmation-failed");
+      expect(screen.queryByTestId("confirmation-alternatives")).toBeNull();
+      expect(screen.getByTestId("confirmation-home")).toBeVisible();
+      expect(screen.getByTestId("confirmation-no-debit")).toBeVisible();
+    });
+
+    it("rendu anglais : titre, statut de débit et CTA traduits", async () => {
+      installBff({
+        [CONFIRM_URL]: [
+          failWith(409, { reason: ["room-unavailable"], debit: ["refunded"] }),
+        ],
+      });
+      renderConfirmation({ locale: "en" });
+
+      const panel = await screen.findByTestId("confirmation-failed");
+      expect(panel).toHaveTextContent("Room no longer available");
+      expect(
+        screen.getByTestId("confirmation-debit-refunded"),
+      ).toHaveTextContent(/Full refund issued/);
+      expect(screen.getByTestId("confirmation-alternatives")).toHaveTextContent(
+        "See available rooms",
+      );
+    });
+  });
+
   describe("i18n — parité fr/en", () => {
     it("rend la preuve en anglais sans clé manquante", async () => {
       installBff({

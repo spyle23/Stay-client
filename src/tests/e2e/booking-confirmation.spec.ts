@@ -217,6 +217,48 @@ test.describe("Confirmation ferme (story 3.2)", () => {
     );
   });
 
+  test("#4 AC-7 : chambre prise — « aucun débit » et CTA vers les chambres de l’hôtel, même séjour", async ({
+    page,
+  }) => {
+    await openConfirmation(page, {
+      sequence: [{ status: 409, reason: "room-unavailable", debit: "none" }],
+    });
+
+    const panel = page.getByTestId("confirmation-failed");
+    await expect(panel).toHaveAttribute("data-reason", "room-unavailable");
+    await expect(page.getByTestId("confirmation-no-debit")).toContainText(
+      "Aucun débit n'a été conservé",
+    );
+    await expect(page.getByTestId("confirmation-retry")).toHaveCount(0);
+    await expect(page.getByTestId("confirmation-recap")).toHaveCount(0);
+    await expect(panel).not.toContainText("Refus du BFF");
+
+    const cta = page.getByTestId("confirmation-alternatives");
+    const href = new URL(
+      (await cta.getAttribute("href")) ?? "",
+      "http://localhost",
+    );
+    expect(href.pathname).toBe(`/hotels/${HOTEL_ID}`);
+    expect(href.searchParams.get("checkInDate")).toBe(isoDatePlus(30));
+    expect(href.searchParams.get("checkOutDate")).toBe(isoDatePlus(32));
+    expect(href.searchParams.get("guests")).toBe("2");
+  });
+
+  test("#4 AC-5 / AC-8 : argent remboursé — « remboursement intégral émis », jamais « aucun débit »", async ({
+    page,
+  }) => {
+    await openConfirmation(page, {
+      sequence: [
+        { status: 409, reason: "room-unavailable", debit: "refunded" },
+      ],
+    });
+
+    await expect(page.getByTestId("confirmation-debit-refunded")).toContainText(
+      "Remboursement intégral émis",
+    );
+    await expect(page.getByTestId("confirmation-no-debit")).toHaveCount(0);
+  });
+
   test("lien sans identifiant exploitable : état explicite, aucun appel au BFF", async ({
     page,
   }) => {
@@ -274,6 +316,20 @@ test.describe("Confirmation ferme (story 3.2)", () => {
         .withTags(WCAG_TAGS)
         .analyze();
       expect(failure.violations, `échec (${theme})`).toEqual([]);
+
+      // #4 : chambre prise, remboursement émis — CTA principal d'alternatives sur le panneau.
+      await page.unrouteAll();
+      await openConfirmation(page, {
+        sequence: [
+          { status: 409, reason: "room-unavailable", debit: "refunded" },
+        ],
+      });
+      await expect(page.getByTestId("confirmation-alternatives")).toBeVisible();
+      await page.getByTestId("confirmation-alternatives").focus();
+      const unavailable = await new AxeBuilder({ page })
+        .withTags(WCAG_TAGS)
+        .analyze();
+      expect(unavailable.violations, `chambre prise (${theme})`).toEqual([]);
     });
   }
 });

@@ -56,6 +56,8 @@ export function confirmationProof(
 export interface ConfirmOutcome {
   status?: number;
   reason?: string;
+  /** #4 — statut de débit porté par le refus (`errors.debit`) : `none`, `refunded`, `captured`. */
+  debit?: string;
   proof?: Record<string, unknown>;
 }
 
@@ -82,7 +84,10 @@ async function fulfillConfirm(
             success: false,
             // Texte technique du BFF : il ne doit JAMAIS apparaître à l'écran.
             message: "Refus du BFF",
-            errors: outcome.reason ? { reason: [outcome.reason] } : {},
+            errors: {
+              ...(outcome.reason ? { reason: [outcome.reason] } : {}),
+              ...(outcome.debit ? { debit: [outcome.debit] } : {}),
+            },
           }
         : {
             success: true,

@@ -184,11 +184,36 @@ export type ConfirmFailureReason =
   | "authorisation-expired"
   | "reservation-not-found"
   | "reservation-cancelled"
+  | "room-unavailable"
   | "not-owner"
   | "session-invalid"
   | "rejected"
   | "unavailable"
   | "unknown";
+
+/**
+ * Statut de débit d'un échec de confirmation (#4, AC-8), lu par le BFF au PMS (`errors.debit`) :
+ * `none` (aucun débit conservé), `refunded` (remboursement intégral émis), `captured` (montant
+ * encaissé sur une réservation annulée, sans remboursement). `null` quand le BFF ne l'a pas établi.
+ */
+export type ConfirmDebitStatus = "none" | "refunded" | "captured";
+
+const KNOWN_DEBITS: ReadonlySet<string> = new Set<ConfirmDebitStatus>([
+  "none",
+  "refunded",
+  "captured",
+]);
+
+/** Statut de débit porté par un échec de confirmation, ou `null` s'il est absent ou inconnu. */
+export function confirmFailureDebit(error: unknown): ConfirmDebitStatus | null {
+  if (!(error instanceof ApiClientError)) {
+    return null;
+  }
+  const debit = error.errors?.debit?.[0];
+  return debit && KNOWN_DEBITS.has(debit)
+    ? (debit as ConfirmDebitStatus)
+    : null;
+}
 
 /**
  * Confirme la réservation et rend la preuve. Idempotent côté BFF et PMS : un rejeu (rechargement,
@@ -211,6 +236,7 @@ const KNOWN_CONFIRM_REASONS: ReadonlySet<string> =
     "authorisation-expired",
     "reservation-not-found",
     "reservation-cancelled",
+    "room-unavailable",
     "not-owner",
     "session-invalid",
     "rejected",

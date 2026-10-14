@@ -34,6 +34,31 @@ const STRIPE_JS_STUB = `window.Stripe = function () {
   };
 };`;
 
+/**
+ * Variante du stub (#4) : statut d'intent rendu par la sonde et résultat de `confirmPayment`
+ * choisis par le test (intent annulé par le balayeur, soumission tardive).
+ */
+function stripeJsStub(retrieveStatus: string, confirmResult: unknown): string {
+  return `window.Stripe = function () {
+  return {
+    elements: function () {
+      return { create: function () { return { mount: function () {}, on: function () {}, destroy: function () {} }; }, getElement: function () { return null; }, update: function () {} };
+    },
+    retrievePaymentIntent: function () {
+      return Promise.resolve({ paymentIntent: { status: ${JSON.stringify(retrieveStatus)} } });
+    },
+    confirmPayment: function () {
+      return Promise.resolve(${JSON.stringify(confirmResult)});
+    },
+    // Rend le stub acceptable par <Elements> (contrôle isStripe de react-stripe-js) : le formulaire
+    // se monte réellement et la soumission atteint confirmPayment.
+    createToken: function () { return Promise.resolve({}); },
+    createPaymentMethod: function () { return Promise.resolve({}); },
+    confirmCardPayment: function () { return Promise.resolve({}); },
+  };
+};`;
+}
+
 /** Date-only UTC décalée de `days` jours (les dates passées sont rejetées à la validation). */
 function isoDatePlus(days: number): string {
   const d = new Date();
@@ -155,6 +180,8 @@ interface BffOptions {
   /** Story 3.1 — réponse du BFF à la demande de PaymentIntent. */
   intentBody?: Record<string, unknown>;
   intentStatus?: number;
+  /** #4 — Stripe.js simulé propre au test (`stripeJsStub`), sinon le stub par défaut. */
+  stripeStub?: string;
 }
 
 async function fulfillCreate(route: Route, outcome: CreateOutcome) {
@@ -184,7 +211,7 @@ async function mockBff(page: Page, options: BffOptions = {}): Promise<void> {
     route.fulfill({
       status: 200,
       contentType: "application/javascript",
-      body: STRIPE_JS_STUB,
+      body: options.stripeStub ?? STRIPE_JS_STUB,
     }),
   );
 
@@ -1381,4 +1408,75 @@ test.describe("paiement — demande d'intent (story 3.1)", () => {
     expect(confirmation.confirmCalls).toHaveLength(1);
     expect(errors).toEqual([]);
   });
+});
+
+/**
+ * #4 (story 3.3) AC-2 / AC-8 — délai de paiement dépassé : le balayeur a annulé la réservation et le
+ * PMS l'intent chez Stripe. L'écran dit qu'aucun débit n'a été conservé et propose de recommencer.
+ */
+test.describe("paiement — délai de paiement dépassé (#4)", () => {
+  test("soumission tardive sur un intent annulé : « aucun débit », recommencer ou accueil", async ({
+    page,
+  }) => {
+    await mockBff(page, {
+      stripeStub: stripeJsStub("requires_payment_method", {
+        error: {
+          type: "invalid_request_error",
+          code: "payment_intent_unexpected_state",
+          message: "This PaymentIntent's status is canceled.",
+          payment_intent: { status: "canceled" },
+        },
+      }),
+    });
+    await page.goto(paymentUrl({ reservationId: RESERVATION_ID }));
+
+    await page.getByTestId("payment-submit").click();
+
+    const notice = page.getByTestId("payment-expired");
+    await expect(notice).toBeVisible();
+    await expect(notice).toContainText("Aucun débit n'a été conservé");
+    await expect(page.getByTestId("payment-form")).toHaveCount(0);
+    await expect(page.getByTestId("payment-expired-restart")).toHaveAttribute(
+      "href",
+      /\/booking\/recap\?/,
+    );
+    await expect(page.getByTestId("payment-expired-home")).toHaveAttribute(
+      "href",
+      "/",
+    );
+    await expect(page).toHaveURL(/\/booking\/payment\?/);
+  });
+
+  test("rechargement sur un intent annulé : l'écran le dit, sans formulaire mort", async ({
+    page,
+  }) => {
+    await mockBff(page, {
+      stripeStub: stripeJsStub("canceled", { error: { message: "stub" } }),
+    });
+    await page.goto(paymentUrl({ reservationId: RESERVATION_ID }));
+
+    await expect(page.getByTestId("payment-expired")).toBeVisible();
+    await expect(page.getByTestId("payment-submit")).toHaveCount(0);
+
+    await page.getByTestId("payment-expired-restart").click();
+    await expect(page).toHaveURL(/\/booking\/recap\?/);
+  });
+
+  for (const theme of ["light", "dark"] as const) {
+    test(`axe AA sans violation — thème ${theme}, délai dépassé`, async ({
+      page,
+    }) => {
+      await page.emulateMedia({ colorScheme: theme });
+      await mockBff(page, {
+        stripeStub: stripeJsStub("canceled", { error: { message: "stub" } }),
+      });
+      await page.goto(paymentUrl({ reservationId: RESERVATION_ID }));
+      await expect(page.getByTestId("payment-expired")).toBeVisible();
+
+      const results = await new AxeBuilder({ page })
+        .withTags(["wcag2a", "wcag2aa", "wcag21a", "wcag21aa"])
+        .analyze();
+      expect(results.violations).toEqual([]);
+    });
+  }
 });
