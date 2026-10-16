@@ -66,7 +66,7 @@ describe("playwright.config.ts", () => {
     expect(config.use?.baseURL).toBe("http://localhost:3257");
     expect(ws.url).toBe("http://localhost:3257");
     expect(ws.env?.PORT).toBe("3257");
-    expect(ws.command).toBe("yarn dev -p 3257");
+    expect(ws.command).toBe("yarn dev:e2e -p 3257");
   });
 
   it("E2E_PORT absent : port 3000 et reuseExistingServer inchangés (AC-2)", async () => {
@@ -76,7 +76,7 @@ describe("playwright.config.ts", () => {
 
     expect(config.use?.baseURL).toBe("http://localhost:3000");
     expect(ws.url).toBe("http://localhost:3000");
-    expect(ws.command).toBe("yarn dev");
+    expect(ws.command).toBe("yarn dev:e2e");
     expect(ws.env?.PORT).toBe("3000");
     expect(ws.reuseExistingServer).toBe(true);
   });

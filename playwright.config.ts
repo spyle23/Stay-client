@@ -21,7 +21,7 @@ export default defineConfig({
   forbidOnly: !!process.env.CI,
   retries: process.env.CI ? 2 : 0,
   /**
-   * Plafond de parallélisme (story 2.2). Le `webServer` est un **dev server Turbopack** qui
+   * Plafond de parallélisme (story 2.2). Le `webServer` est un **dev server** (webpack, #190) qui
    * compile chaque route **à la demande** : au-delà de ~4 workers, plusieurs compilations à froid
    * se déclenchent simultanément et des assertions franchissent le timeout de 5 s — des échecs
    * qui n'ont rien à voir avec le code testé (constaté en ajoutant les routes du tunnel).
@@ -39,8 +39,13 @@ export default defineConfig({
   },
   projects: [{ name: "chromium", use: { ...devices["Desktop Chrome"] } }],
   webServer: {
-    // Port explicite (`-p` et `PORT`) quand E2E_PORT est fourni ; sinon commande historique.
-    command: hasTicketPort ? `yarn dev -p ${E2E_PORT}` : "yarn dev",
+    /**
+     * `next dev` **sans Turbopack** (`dev:e2e`, webpack, spyle23/hotelerie#190) : sous Next 16,
+     * Turbopack est le défaut et engendrait des centaines de workers `.next/dev` (559 sous #183)
+     * jusqu'à l'épuisement de la mémoire de la machine. `yarn dev` (interactif) reste en Turbopack.
+     * Port explicite (`-p` et `PORT`) quand E2E_PORT est fourni ; sinon port par défaut (3000).
+     */
+    command: hasTicketPort ? `yarn dev:e2e -p ${E2E_PORT}` : "yarn dev:e2e",
     url: WEB_URL,
     env: { PORT: String(E2E_PORT) },
     reuseExistingServer: !process.env.CI,
