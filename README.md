@@ -52,3 +52,14 @@ yarn gen:types
 
 Le client HTTP `src/lib/api-client.ts` cible le BFF et envoie le **cookie de session opaque**
 (`credentials: "include"`) : aucune garde JWT au navigateur (le BFF est gardien des jetons).
+
+## E2E isolés : préchauffage des routes
+
+`playwright.config.ts` lance `next dev --webpack` (`yarn dev:e2e`, spyle23/hotelerie#190), qui
+compile chaque route à sa première requête. Avant le premier test, le global setup
+(`e2e/global-setup.ts`, helper `e2e/warmup.ts`) demande une fois chaque route de `src/app` (plus une
+route inconnue, pour la page 404) : sous plusieurs workers, une route froide dépassait le délai d'un
+test (spyle23/hotelerie#198). Ligne `[e2e warmup] <n> routes compilees en <s> s` ;
+`E2E_WARMUP=0` le désactive (spec isolée en débogage). Le serveur des e2e (`NEXT_E2E_DEV_SERVER=1`,
+`src/lib/e2e-dev-server.ts`) garde ces routes compilées pendant toute la suite ; `yarn dev`,
+`yarn build` et `yarn start` ne sont pas concernés.

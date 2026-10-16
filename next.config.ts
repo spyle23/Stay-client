@@ -1,6 +1,8 @@
 import type { NextConfig } from "next";
 import createNextIntlPlugin from "next-intl/plugin";
 
+import { e2eDevServerOverrides } from "./src/lib/e2e-dev-server";
+
 // next-intl SANS routing d'URL : le plugin pointe vers la config de requête qui
 // résout la locale depuis le cookie `NEXT_LOCALE` (src/i18n/request.ts).
 const withNextIntl = createNextIntlPlugin("./src/i18n/request.ts");
@@ -25,6 +27,8 @@ const nextConfig: NextConfig = {
   // Build de production des e2e isolés dans un dossier à part (#148, `playwright.prod.config.ts`) :
   // le `.next` des portes, réutilisé par la Phase 3, n'est jamais écrasé.
   distDir: process.env.STAY_CLIENT_DIST_DIR || ".next",
+  // Serveur des e2e isolés seulement (#198) : routes compilées gardées pendant toute la suite.
+  ...e2eDevServerOverrides(process.env),
 };
 
 export default withNextIntl(nextConfig);

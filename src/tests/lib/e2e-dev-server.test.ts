@@ -4,6 +4,13 @@ import { join } from "node:path";
 
 import { afterEach, beforeEach, describe, expect, it, vi } from "vitest";
 
+import {
+  E2E_DEV_SERVER_ENV,
+  E2E_PAGES_BUFFER_LENGTH,
+  E2E_PAGES_MAX_INACTIVE_AGE_MS,
+  e2eDevServerOverrides,
+} from "../../lib/e2e-dev-server";
+
 /**
  * spyle23/hotelerie#190 — serveur des e2e isolés en `next dev` **sans Turbopack**.
  *
@@ -99,5 +106,69 @@ describe("serveurs web des configs Playwright (AC-1, AC-5)", () => {
     );
 
     expect(ws.command).toBe("yarn build && yarn start -p 3290");
+  });
+});
+
+/**
+ * spyle23/hotelerie#198 — routes compilées avant le premier test (global setup) et gardées
+ * compilées pendant toute la suite (`onDemandEntries` du serveur des e2e seulement).
+ */
+describe("préchauffage du serveur des e2e isolés (#198)", () => {
+  const KEYS = ["E2E_PORT", "CI"] as const;
+  const saved = Object.fromEntries(KEYS.map((k) => [k, process.env[k]]));
+
+  beforeEach(() => {
+    vi.resetModules();
+    for (const k of KEYS) delete process.env[k];
+  });
+
+  afterEach(() => {
+    for (const [key, value] of Object.entries(saved)) {
+      if (value === undefined) delete process.env[key];
+      else process.env[key] = value;
+    }
+  });
+
+  it("e2e isolés : global setup de préchauffage (AC-1)", async () => {
+    const config = (await import("../../../playwright.config")).default;
+
+    expect(config.globalSetup).toBe("./e2e/global-setup.ts");
+  });
+
+  it("e2e isolés : le serveur web garde ses routes compilées (E2E dev server)", async () => {
+    process.env.E2E_PORT = "3298";
+    const config = (await import("../../../playwright.config")).default;
+    const ws = config.webServer as { env?: Record<string, string> };
+
+    expect(ws.env?.[E2E_DEV_SERVER_ENV]).toBe("1");
+    expect(ws.env?.PORT).toBe("3298");
+  });
+
+  it("e2e de production : ni préchauffage ni réglage du serveur de dev", async () => {
+    const config = (await import("../../../playwright.prod.config")).default;
+    const ws = config.webServer as { env?: Record<string, string> };
+
+    expect(config.globalSetup).toBeUndefined();
+    expect(ws.env?.[E2E_DEV_SERVER_ENV]).toBeUndefined();
+  });
+});
+
+describe("e2eDevServerOverrides (#198)", () => {
+  it("rien hors du serveur des e2e (yarn dev, build, Phase 3)", () => {
+    expect(e2eDevServerOverrides({})).toEqual({});
+    expect(e2eDevServerOverrides({ [E2E_DEV_SERVER_ENV]: "0" })).toEqual({});
+  });
+
+  it("serveur des e2e : aucune route libérée pendant la suite", () => {
+    expect(e2eDevServerOverrides({ [E2E_DEV_SERVER_ENV]: "1" })).toEqual({
+      onDemandEntries: {
+        maxInactiveAge: E2E_PAGES_MAX_INACTIVE_AGE_MS,
+        pagesBufferLength: E2E_PAGES_BUFFER_LENGTH,
+      },
+    });
+    expect(E2E_PAGES_MAX_INACTIVE_AGE_MS).toBeGreaterThanOrEqual(
+      30 * 60 * 1000,
+    );
+    expect(E2E_PAGES_BUFFER_LENGTH).toBeGreaterThan(100);
   });
 });
