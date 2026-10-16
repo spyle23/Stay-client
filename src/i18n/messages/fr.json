@@ -554,6 +554,10 @@
           "title": "Confirmation interrompue",
           "body": "Une erreur inattendue a interrompu la confirmation. Réessayez dans un instant."
         },
+        "payment-verification-pending": {
+          "title": "Vérification du paiement en cours",
+          "body": "Nous n'avons pas encore pu vérifier le paiement de cette réservation. Réessayez dans un instant, sans payer à nouveau."
+        },
         "room-unavailable": {
           "title": "Chambre plus disponible",
           "body": "Cette chambre vient d'être réservée pour vos dates : votre réservation n'a pas pu être confirmée. D'autres chambres de l'hôtel sont peut-être libres pour le même séjour."

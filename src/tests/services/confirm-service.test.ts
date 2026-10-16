@@ -16,6 +16,7 @@ import {
   PAYMENT_ENDPOINTS,
   paymentKeys,
   RETRYABLE_CONFIRM_REASONS,
+  AUTO_RETRY_CONFIRM_REASONS,
   type ConfirmFailureReason,
 } from "@/services/payment.service";
 
@@ -85,6 +86,16 @@ describe("confirmation — services", () => {
           new ApiClientError("texte d'affichage", 409, { reason: [reason] }),
         ),
       ).toBe(reason);
+    });
+
+    it("#183 AC-2 : 503 payment-verification-pending → motif distinct, pas unavailable", () => {
+      expect(
+        confirmFailureReason(
+          new ApiClientError("…", 503, {
+            reason: ["payment-verification-pending"],
+          }),
+        ),
+      ).toBe("payment-verification-pending");
     });
 
     it("503 sans motif → unavailable", () => {
@@ -184,6 +195,8 @@ describe("confirmation — services", () => {
       "not-owner",
       "session-invalid",
       "rejected",
+      // #183 : rien n'est établi tant que la vérification est en cours.
+      "payment-verification-pending",
     ])(
       "%s sans statut : débit non établi (unknown), jamais « aucun débit »",
       (reason) => {
@@ -192,10 +205,21 @@ describe("confirmation — services", () => {
     );
   });
 
+  describe("AUTO_RETRY_CONFIRM_REASONS (#183)", () => {
+    it("rejoue seul les pannes et la vérification en cours, jamais capture-failed", () => {
+      expect([...AUTO_RETRY_CONFIRM_REASONS].sort()).toEqual([
+        "payment-verification-pending",
+        "unavailable",
+        "unknown",
+      ]);
+    });
+  });
+
   describe("RETRYABLE_CONFIRM_REASONS", () => {
-    it("ne contient QUE unavailable, unknown et capture-failed", () => {
+    it("ne contient QUE unavailable, unknown, capture-failed et payment-verification-pending", () => {
       expect([...RETRYABLE_CONFIRM_REASONS].sort()).toEqual([
         "capture-failed",
+        "payment-verification-pending",
         "unavailable",
         "unknown",
       ]);

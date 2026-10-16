@@ -188,6 +188,8 @@ export type ConfirmFailureReason =
   | "not-owner"
   | "session-invalid"
   | "rejected"
+  // #183 AC-2 : hold expiré, paiement pas encore vérifiable (503 rejouable, débit non établi).
+  | "payment-verification-pending"
   | "unavailable"
   | "unknown";
 
@@ -273,6 +275,7 @@ const KNOWN_CONFIRM_REASONS: ReadonlySet<string> =
     "not-owner",
     "session-invalid",
     "rejected",
+    "payment-verification-pending",
   ]);
 
 /**
@@ -298,8 +301,24 @@ export function confirmFailureReason(error: unknown): ConfirmFailureReason {
 
 /**
  * Motifs pour lesquels **réessayer à l'identique** peut aboutir : une indisponibilité, une erreur
- * inattendue, ou une capture que Stripe n'a pas pu faire (la confirmation est idempotente). Tout le
- * reste est déterministe.
+ * inattendue, une capture que Stripe n'a pas pu faire (la confirmation est idempotente), ou un
+ * paiement que le BFF n'a pas encore pu vérifier (#183). Tout le reste est déterministe.
  */
 export const RETRYABLE_CONFIRM_REASONS: ReadonlySet<ConfirmFailureReason> =
-  new Set<ConfirmFailureReason>(["unavailable", "unknown", "capture-failed"]);
+  new Set<ConfirmFailureReason>([
+    "unavailable",
+    "unknown",
+    "capture-failed",
+    "payment-verification-pending",
+  ]);
+
+/**
+ * Motifs transitoires rejoués **automatiquement** une fois, sans action du voyageur : une panne, ou
+ * un paiement pas encore vérifiable (#183). `capture-failed` attend un geste explicite.
+ */
+export const AUTO_RETRY_CONFIRM_REASONS: ReadonlySet<ConfirmFailureReason> =
+  new Set<ConfirmFailureReason>([
+    "unavailable",
+    "unknown",
+    "payment-verification-pending",
+  ]);
