@@ -39,3 +39,24 @@ describe("next.config — métadonnées et dossier de build (#148)", () => {
     expect(config.distDir).toBe(".next-e2e");
   });
 });
+
+describe("next.config — serveur des e2e isolés (#198)", () => {
+  afterEach(() => {
+    vi.unstubAllEnvs();
+  });
+
+  it("routes compilées gardées pendant toute la suite e2e", async () => {
+    vi.stubEnv("NEXT_E2E_DEV_SERVER", "1");
+    const { default: config } = await loadConfig();
+    expect(config.onDemandEntries?.maxInactiveAge).toBeGreaterThanOrEqual(
+      30 * 60 * 1000,
+    );
+    expect(config.onDemandEntries?.pagesBufferLength).toBeGreaterThan(100);
+  });
+
+  it("réglages par défaut de Next ailleurs (yarn dev, build, Phase 3)", async () => {
+    vi.stubEnv("NEXT_E2E_DEV_SERVER", "");
+    const { default: config } = await loadConfig();
+    expect(config.onDemandEntries).toBeUndefined();
+  });
+});
