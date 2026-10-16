@@ -138,6 +138,35 @@ async function fillGuestForm(page: Page): Promise<void> {
  * `e2e/smoke/booking-identify.smoke.spec.ts`.
  */
 test.describe("Identification invité ou compte (isolé, BFF mocké)", () => {
+  /**
+   * Contournement temporaire (spyle23/hotelerie#183), en attendant le préchauffage global des
+   * routes de #198 : sous `next dev --webpack` (#190), la première navigation vers `payment` ou
+   * `recap` compile la route à la demande et, avec 4 workers, dépasse le délai d'assertion de 5 s.
+   * Les deux routes cibles sont demandées une fois au serveur avant les tests (délais inchangés).
+   * À retirer quand #198 livre son `globalSetup`.
+   */
+  test.beforeAll(async ({ playwright }, testInfo) => {
+    testInfo.setTimeout(150_000);
+    const ctx = await playwright.request.newContext({
+      baseURL: testInfo.project.use.baseURL,
+    });
+    try {
+      for (const route of ["payment", "recap"]) {
+        await ctx
+          .get(
+            identifyUrl().replace("/booking/identify", `/booking/${route}`),
+            {
+              timeout: 60_000,
+              failOnStatusCode: false,
+            },
+          )
+          .catch(() => undefined);
+      }
+    } finally {
+      await ctx.dispose();
+    }
+  });
+
   test("invité par défaut : le formulaire est proposé sans inscription forcée", async ({
     page,
   }) => {
