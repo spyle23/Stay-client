@@ -889,11 +889,16 @@ test(
     await expect(page).toHaveURL(/\/booking\/confirmation\?/, {
       timeout: 60_000,
     });
-    // Une panne n'est jamais un cul-de-sac : motif, aucun débit conservé, « Réessayer ».
+    // Une panne n'est jamais un cul-de-sac : motif, « Réessayer ». Carte retenue : jamais « aucun
+    // débit conservé », mais un rejeu sûr (#184 AC-2).
     await expect(page.getByTestId("confirmation-failed")).toBeVisible({
       timeout: 30_000,
     });
     await expect(page.getByTestId("confirmation-retry")).toBeVisible();
+    await expect(page.getByTestId("confirmation-no-debit")).toHaveCount(0);
+    await expect(
+      page.getByTestId("confirmation-debit-unknown"),
+    ).toHaveAttribute("data-retry-safe", "true");
     await page.unroute(CONFIRM_ROUTE);
 
     // Rechargement de la page de paiement : carte déjà retenue → confirmation, sans formulaire.

@@ -176,7 +176,7 @@ test.describe("Confirmation ferme (story 3.2)", () => {
     );
   });
 
-  test("capture refusée par Stripe : motif, aucun débit conservé, « Réessayer » aboutit", async ({
+  test("capture refusée par Stripe : motif, débit non établi mais rejeu sûr, « Réessayer » aboutit", async ({
     page,
   }) => {
     const mock = await openConfirmation(page, {
@@ -186,7 +186,11 @@ test.describe("Confirmation ferme (story 3.2)", () => {
     const panel = page.getByTestId("confirmation-failed");
     await expect(panel).toBeVisible();
     await expect(panel).toHaveAttribute("data-reason", "capture-failed");
-    await expect(page.getByTestId("confirmation-no-debit")).toBeVisible();
+    // #184 : une capture non aboutie (restée `processing`) n'établit pas l'absence de débit.
+    await expect(page.getByTestId("confirmation-debit-unknown")).toContainText(
+      "ne vous débitera jamais deux fois",
+    );
+    await expect(page.getByTestId("confirmation-no-debit")).toHaveCount(0);
     await expect(panel).not.toContainText("Refus du BFF");
 
     await page.getByTestId("confirmation-retry").click();
@@ -332,6 +336,75 @@ test.describe("Confirmation ferme (story 3.2)", () => {
     await expect(page.getByTestId("confirmation-proof")).toBeVisible();
     expect(mock.confirmCalls.length).toBeGreaterThanOrEqual(3);
   });
+
+  test("#184 AC-1 : refus déterministe, aucun débit établi — « Aucun débit n'a été conservé » reste affiché", async ({
+    page,
+  }) => {
+    await openConfirmation(page, {
+      sequence: [{ status: 409, reason: "amount-mismatch", debit: "none" }],
+    });
+
+    const panel = page.getByTestId("confirmation-failed");
+    await expect(panel).toHaveAttribute("data-reason", "amount-mismatch");
+    await expect(page.getByTestId("confirmation-no-debit")).toContainText(
+      "Aucun débit n'a été conservé",
+    );
+    await expect(page.getByTestId("confirmation-retry")).toHaveCount(0);
+    await expect(page.getByTestId("confirmation-recap")).toBeVisible();
+  });
+
+  test("#184 AC-1 : paiement non autorisé — l'absence de débit établie par le motif", async ({
+    page,
+  }) => {
+    await openConfirmation(page, {
+      sequence: [{ status: 409, reason: "payment-not-authorized" }],
+    });
+
+    await expect(page.getByTestId("confirmation-no-debit")).toContainText(
+      "Aucun débit n'a été conservé",
+    );
+  });
+
+  test("#184 : montant divergent sans statut du BFF — jamais « aucun débit » ni « rien encaissé »", async ({
+    page,
+  }) => {
+    await openConfirmation(page, {
+      sequence: [{ status: 409, reason: "amount-mismatch" }],
+    });
+
+    const panel = page.getByTestId("confirmation-failed");
+    await expect(page.getByTestId("confirmation-debit-unknown")).toBeVisible();
+    await expect(page.getByTestId("confirmation-no-debit")).toHaveCount(0);
+    await expect(panel).not.toContainText("rien encaissé");
+  });
+
+  for (const { reason, status } of [
+    { reason: "unavailable", status: 503 },
+    { reason: "unknown", status: 500 },
+  ]) {
+    test(`#184 AC-2 : ${reason} — texte honnête au lieu de « aucun débit », « Réessayer » aboutit`, async ({
+      page,
+    }) => {
+      const mock = await openConfirmation(page, {
+        sequence: [{ status }, { status }, {}],
+      });
+
+      const panel = page.getByTestId("confirmation-failed");
+      await expect(panel).toHaveAttribute("data-reason", reason);
+      const debit = page.getByTestId("confirmation-debit-unknown");
+      await expect(debit).toContainText(
+        "Réessayer la confirmation ne vous débitera jamais deux fois",
+      );
+      await expect(debit).toHaveAttribute("data-retry-safe", "true");
+      await expect(page.getByTestId("confirmation-no-debit")).toHaveCount(0);
+      await expect(panel).not.toContainText("Aucun débit n'a été conservé");
+
+      await page.getByTestId("confirmation-retry").click();
+
+      await expect(page.getByTestId("confirmation-proof")).toBeVisible();
+      expect(mock.confirmCalls).toHaveLength(3);
+    });
+  }
 
   test("lien sans identifiant exploitable : état explicite, aucun appel au BFF", async ({
     page,

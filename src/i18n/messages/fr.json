@@ -516,7 +516,7 @@
         },
         "amount-mismatch": {
           "title": "Montant différent du total dû",
-          "body": "Le montant autorisé sur votre carte ne correspond pas au total de votre réservation. Nous n'avons rien encaissé."
+          "body": "Le montant de votre paiement ne correspond pas au total de votre réservation : nous ne pouvons pas la confirmer."
         },
         "capture-failed": {
           "title": "Encaissement momentanément impossible",
@@ -567,6 +567,7 @@
       "debitCaptured": "Un montant a été encaissé alors que cette réservation n'est pas confirmée. Contactez l'hôtel pour en obtenir le remboursement.",
       "debitHeld": "Un montant reste réservé sur votre carte, sans être encaissé : sa libération n'a pas encore abouti. Évitez de payer une seconde fois en attendant.",
       "debitUnknown": "L'état de votre paiement n'a pas encore pu être vérifié. Avant de payer à nouveau, consultez vos réservations ; si un montant a été prélevé sans réservation confirmée, contactez l'hôtel.",
+      "debitUnknownRetrySafe": "L'état de votre paiement n'a pas encore pu être vérifié. Réessayer la confirmation ne vous débitera jamais deux fois : ne payez pas à nouveau.",
       "alternativesCta": "Voir les chambres disponibles"
     },
     "reservationSettledProofCta": "Voir la confirmation de ma réservation"

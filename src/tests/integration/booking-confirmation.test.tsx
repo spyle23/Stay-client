@@ -377,9 +377,11 @@ describe("BookingConfirmation", () => {
 
       const panel = await screen.findByTestId("confirmation-failed");
       expect(panel).toHaveAttribute("role", "alert");
-      expect(screen.getByTestId("confirmation-no-debit")).toHaveTextContent(
-        /Aucun débit n'a été conservé/,
-      );
+      // #184 : une capture non aboutie n'établit pas l'absence de débit (capture `processing`).
+      expect(
+        screen.getByTestId("confirmation-debit-unknown"),
+      ).toHaveTextContent(/ne vous débitera jamais deux fois/);
+      expect(screen.queryByTestId("confirmation-no-debit")).toBeNull();
 
       fireEvent.click(screen.getByTestId("confirmation-retry"));
 
@@ -456,7 +458,8 @@ describe("BookingConfirmation", () => {
 
     it.each([
       ["payment-not-authorized", "confirmation-no-debit"],
-      ["amount-mismatch", "confirmation-no-debit"],
+      // #184 : un montant divergent peut avoir été encaissé ; sans statut du BFF, rien n'est établi.
+      ["amount-mismatch", "confirmation-debit-unknown"],
       ["authorisation-expired", "confirmation-no-debit"],
       // Revue #4, ronde 1 : sans statut établi par le BFF, ces motifs ne prouvent rien du débit.
       ["reservation-cancelled", "confirmation-debit-unknown"],
@@ -714,6 +717,191 @@ describe("BookingConfirmation", () => {
       expect(screen.getByTestId("confirmation-alternatives")).toHaveTextContent(
         "See available rooms",
       );
+    });
+  });
+
+  /**
+   * #184 — énoncé de débit par famille de motifs. « Aucun débit n'a été conservé » n'apparaît que
+   * quand il est établi (par le motif ou par le BFF) ; une panne rejouable dit ce qui est vrai :
+   * le paiement n'est pas encore vérifié, et réessayer ne débite jamais deux fois.
+   */
+  describe("#184 — énoncé de débit par famille de motifs", () => {
+    const NO_DEBIT = /Aucun débit n'a été conservé|No charge has been kept/;
+    const failWith = (
+      status: number,
+      errors: Record<string, string[]>,
+    ): Reply => ({
+      status,
+      body: { success: false, message: "Texte technique du BFF", errors },
+    });
+
+    it.each([
+      "payment-not-authorized",
+      "amount-mismatch",
+      "capture-failed",
+      "authorisation-expired",
+      "reservation-cancelled",
+      "reservation-not-found",
+      "not-owner",
+      "rejected",
+    ])(
+      "AC-1 — %s, aucun débit établi : la mention « Aucun débit n'a été conservé » reste affichée",
+      async (reason) => {
+        installBff({
+          [CONFIRM_URL]: [failWith(409, { reason: [reason], debit: ["none"] })],
+        });
+        renderConfirmation();
+
+        const panel = await screen.findByTestId("confirmation-failed");
+        expect(panel).toHaveAttribute("data-reason", reason);
+        expect(screen.getByTestId("confirmation-no-debit")).toHaveTextContent(
+          frMessages.booking.confirmation.noDebitKept,
+        );
+      },
+    );
+
+    it.each([
+      ["payment-not-authorized", "fr"],
+      ["authorisation-expired", "en"],
+    ] as const)(
+      "AC-1 — %s (%s) prouve l'absence de débit par lui-même, sans statut du BFF",
+      async (reason, locale) => {
+        installBff({ [CONFIRM_URL]: [fail(409, reason)] });
+        renderConfirmation({ locale });
+
+        const messages = locale === "fr" ? frMessages : enMessages;
+        expect(
+          await screen.findByTestId("confirmation-no-debit"),
+        ).toHaveTextContent(messages.booking.confirmation.noDebitKept);
+      },
+    );
+
+    it.each([
+      ["amount-mismatch", "fr"],
+      ["amount-mismatch", "en"],
+      ["capture-failed", "fr"],
+      ["capture-failed", "en"],
+    ] as const)(
+      "%s (%s) sans statut du BFF : débit non établi, jamais « aucun débit » ni « rien encaissé »",
+      async (reason, locale) => {
+        installBff({ [CONFIRM_URL]: [fail(502, reason)] });
+        renderConfirmation({ locale });
+
+        const panel = await screen.findByTestId("confirmation-failed");
+        expect(panel).toHaveAttribute("data-reason", reason);
+        expect(screen.getByTestId("confirmation-debit-unknown")).toBeVisible();
+        expect(screen.queryByTestId("confirmation-no-debit")).toBeNull();
+        expect(panel.textContent).not.toMatch(NO_DEBIT);
+        expect(panel.textContent).not.toMatch(
+          /rien encaissé|not collected anything/,
+        );
+      },
+    );
+
+    it.each([
+      ["unavailable", 503, "fr"],
+      ["unavailable", 503, "en"],
+      ["unknown", 500, "fr"],
+      ["unknown", 500, "en"],
+    ] as const)(
+      "AC-2 — %s (%s, %s) : texte honnête à la place de « aucun débit », « Réessayer » sûr",
+      async (reason, status, locale) => {
+        installBff({ [CONFIRM_URL]: [fail(status), fail(status)] });
+        renderConfirmation({ locale });
+
+        const panel = await screen.findByTestId(
+          "confirmation-failed",
+          {},
+          { timeout: 4_000 },
+        );
+        expect(panel).toHaveAttribute("data-reason", reason);
+        const messages = locale === "fr" ? frMessages : enMessages;
+        const debit = screen.getByTestId("confirmation-debit-unknown");
+        expect(debit).toHaveTextContent(
+          messages.booking.confirmation.debitUnknownRetrySafe,
+        );
+        expect(debit).toHaveAttribute("data-retry-safe", "true");
+        expect(screen.queryByTestId("confirmation-no-debit")).toBeNull();
+        expect(panel.textContent).not.toMatch(NO_DEBIT);
+        expect(screen.getByTestId("confirmation-retry")).toBeVisible();
+      },
+    );
+
+    it("AC-2 — panne réseau (la requête n'aboutit pas) : même texte honnête", async () => {
+      global.fetch = vi.fn(() =>
+        Promise.reject(new TypeError("Failed to fetch")),
+      ) as unknown as typeof fetch;
+      renderConfirmation();
+
+      const panel = await screen.findByTestId(
+        "confirmation-failed",
+        {},
+        { timeout: 4_000 },
+      );
+      expect(panel).toHaveAttribute("data-reason", "unknown");
+      expect(
+        screen.getByTestId("confirmation-debit-unknown"),
+      ).toHaveTextContent(
+        frMessages.booking.confirmation.debitUnknownRetrySafe,
+      );
+      expect(panel.textContent).not.toMatch(NO_DEBIT);
+    });
+
+    it.each(["fr", "en"] as const)(
+      "payment-verification-pending (%s) sans statut : texte de rejeu sûr, jamais « aucun débit »",
+      async (locale) => {
+        installBff({
+          [CONFIRM_URL]: [
+            fail(503, "payment-verification-pending"),
+            fail(503, "payment-verification-pending"),
+          ],
+        });
+        renderConfirmation({ locale });
+
+        const panel = await screen.findByTestId(
+          "confirmation-failed",
+          {},
+          { timeout: 4_000 },
+        );
+        expect(panel).toHaveAttribute(
+          "data-reason",
+          "payment-verification-pending",
+        );
+        const messages = locale === "fr" ? frMessages : enMessages;
+        const debit = screen.getByTestId("confirmation-debit-unknown");
+        expect(debit).toHaveTextContent(
+          messages.booking.confirmation.debitUnknownRetrySafe,
+        );
+        expect(debit).toHaveAttribute("data-retry-safe", "true");
+        expect(panel.textContent).not.toMatch(NO_DEBIT);
+      },
+    );
+
+    it("motif rejouable avec un statut établi par le BFF : le statut prime sur le texte de rejeu", async () => {
+      installBff({
+        [CONFIRM_URL]: [
+          failWith(503, { reason: ["capture-failed"], debit: ["captured"] }),
+        ],
+      });
+      renderConfirmation();
+
+      const debit = await screen.findByTestId("confirmation-debit-captured");
+      expect(debit).toHaveTextContent(
+        frMessages.booking.confirmation.debitCaptured,
+      );
+      expect(debit).not.toHaveAttribute("data-retry-safe");
+      expect(screen.getByTestId("confirmation-retry")).toBeVisible();
+    });
+
+    it("un motif sans issue de rejeu garde le texte « non établi » qui renvoie aux réservations", async () => {
+      installBff({ [CONFIRM_URL]: [fail(409, "rejected")] });
+      renderConfirmation();
+
+      const debit = await screen.findByTestId("confirmation-debit-unknown");
+      expect(debit).toHaveTextContent(
+        frMessages.booking.confirmation.debitUnknown,
+      );
+      expect(debit).not.toHaveAttribute("data-retry-safe");
     });
   });
 
