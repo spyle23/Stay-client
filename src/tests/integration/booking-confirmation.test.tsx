@@ -847,6 +847,52 @@ describe("BookingConfirmation", () => {
       expect(panel.textContent).not.toMatch(NO_DEBIT);
     });
 
+    it.each(["fr", "en"] as const)(
+      "payment-verification-pending (%s) sans statut : texte de rejeu sûr, jamais « aucun débit »",
+      async (locale) => {
+        installBff({
+          [CONFIRM_URL]: [
+            fail(503, "payment-verification-pending"),
+            fail(503, "payment-verification-pending"),
+          ],
+        });
+        renderConfirmation({ locale });
+
+        const panel = await screen.findByTestId(
+          "confirmation-failed",
+          {},
+          { timeout: 4_000 },
+        );
+        expect(panel).toHaveAttribute(
+          "data-reason",
+          "payment-verification-pending",
+        );
+        const messages = locale === "fr" ? frMessages : enMessages;
+        const debit = screen.getByTestId("confirmation-debit-unknown");
+        expect(debit).toHaveTextContent(
+          messages.booking.confirmation.debitUnknownRetrySafe,
+        );
+        expect(debit).toHaveAttribute("data-retry-safe", "true");
+        expect(panel.textContent).not.toMatch(NO_DEBIT);
+      },
+    );
+
+    it("motif rejouable avec un statut établi par le BFF : le statut prime sur le texte de rejeu", async () => {
+      installBff({
+        [CONFIRM_URL]: [
+          failWith(503, { reason: ["capture-failed"], debit: ["captured"] }),
+        ],
+      });
+      renderConfirmation();
+
+      const debit = await screen.findByTestId("confirmation-debit-captured");
+      expect(debit).toHaveTextContent(
+        frMessages.booking.confirmation.debitCaptured,
+      );
+      expect(debit).not.toHaveAttribute("data-retry-safe");
+      expect(screen.getByTestId("confirmation-retry")).toBeVisible();
+    });
+
     it("un motif sans issue de rejeu garde le texte « non établi » qui renvoie aux réservations", async () => {
       installBff({ [CONFIRM_URL]: [fail(409, "rejected")] });
       renderConfirmation();
