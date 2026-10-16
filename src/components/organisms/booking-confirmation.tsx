@@ -146,6 +146,10 @@ function ConfirmationFailure({
         })
       : null;
   const debitStatus = confirmDebitStatement(reason, debit);
+  // #184 AC-2 : débit non établi sur un motif rejouable (panne, capture non aboutie, vérification
+  // en cours) : dire que réessayer est sûr (confirmation idempotente au BFF et au PMS), plutôt que
+  // renvoyer le voyageur vers ses réservations.
+  const retrySafe = debitStatus === "unknown" && retryable;
 
   return (
     <section
@@ -170,8 +174,9 @@ function ConfirmationFailure({
             : `confirmation-debit-${debitStatus}`
         }
         data-debit={debitStatus}
+        data-retry-safe={retrySafe ? "true" : undefined}
       >
-        {t(DEBIT_MESSAGE[debitStatus])}
+        {t(retrySafe ? "debitUnknownRetrySafe" : DEBIT_MESSAGE[debitStatus])}
       </p>
 
       <div className="flex flex-wrap gap-2">

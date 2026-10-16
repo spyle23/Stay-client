@@ -213,14 +213,14 @@ const KNOWN_DEBITS: ReadonlySet<string> = new Set<ConfirmDebitStatus>([
 
 /**
  * Motifs qui établissent **par construction** qu'aucun débit n'a été conservé : aucun paiement
- * autorisé, montant refusé avant capture, capture non aboutie, autorisation expirée. Tout autre
- * motif sans statut du BFF (panne, chambre prise, annulée…) ne prouve rien (revue #4, ronde 1).
+ * autorisé, autorisation expirée. Tout autre motif sans statut du BFF (panne, chambre prise,
+ * annulée…) ne prouve rien (revue #4, ronde 1). Ni `amount-mismatch` (le PMS le rend aussi pour un
+ * intent encaissé ou autorisé d'un autre montant) ni `capture-failed` (capture restée `processing`,
+ * Stripe illisible) : le PMS ne libère rien sur ces motifs (#184, constat QA de #4).
  */
 const NO_DEBIT_BY_CONSTRUCTION: ReadonlySet<ConfirmFailureReason> =
   new Set<ConfirmFailureReason>([
     "payment-not-authorized",
-    "amount-mismatch",
-    "capture-failed",
     "authorisation-expired",
   ]);
 

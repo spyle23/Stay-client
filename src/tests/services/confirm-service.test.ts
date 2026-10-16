@@ -171,13 +171,14 @@ describe("confirmation — services", () => {
       (debit) => {
         expect(confirmDebitStatement("unavailable", debit)).toBe(debit);
         expect(confirmDebitStatement("room-unavailable", debit)).toBe(debit);
+        // #184 AC-1 : « aucun débit » sur ces motifs seulement quand le BFF l'établit.
+        expect(confirmDebitStatement("amount-mismatch", debit)).toBe(debit);
+        expect(confirmDebitStatement("capture-failed", debit)).toBe(debit);
       },
     );
 
     it.each<ConfirmFailureReason>([
       "payment-not-authorized",
-      "amount-mismatch",
-      "capture-failed",
       "authorisation-expired",
     ])(
       "%s sans statut : « aucun débit », établi par le motif lui-même",
@@ -187,6 +188,10 @@ describe("confirmation — services", () => {
     );
 
     it.each<ConfirmFailureReason>([
+      // #184 (constat QA #4) : le PMS ne libère rien sur ces motifs ; `amount-mismatch` peut suivre
+      // un encaissement d'un autre montant, `capture-failed` une capture restée `processing`.
+      "amount-mismatch",
+      "capture-failed",
       "unavailable",
       "unknown",
       "room-unavailable",
